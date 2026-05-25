@@ -26,6 +26,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -34,6 +37,7 @@ jobs:
         with:
           context: .
           file: Dockerfile.bot
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/aegis-bot:latest
           cache-from: type=gha,scope=bot
@@ -44,6 +48,7 @@ jobs:
         with:
           context: .
           file: Dockerfile.api
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/aegis-api:latest
           cache-from: type=gha,scope=api
@@ -56,6 +61,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./web
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/aegis-web:latest
           cache-from: type=gha,scope=web
