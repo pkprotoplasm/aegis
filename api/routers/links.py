@@ -31,19 +31,19 @@ def take_action(link_id: int, body: ActionRequest):
             success, target, notes = whois_lookup.report_whois(url, context, case_id, triage_results)
             db.log_abuse_action(link_id, "whois_email", target,
                                 "sent" if success else "failed", notes)
-            return {"success": success, "notes": notes if success else None}
+            return {"success": success, "notes": notes}
 
         elif action == "hosting":
             success, target, notes, form_url = hosting.report_hosting(url, context, case_id, triage_results)
             db.log_abuse_action(link_id, "hosting", target,
                                 "sent" if success else "failed", notes)
-            return {"success": success, "notes": notes if success else None}
+            return {"success": success, "notes": notes}
 
         elif action == "netcraft":
             success, notes = phishing.submit_to_netcraft(url)
             db.log_abuse_action(link_id, "netcraft", "report.netcraft.com",
                                 "sent" if success else "failed", notes)
-            return {"success": success, "notes": notes if success else None}
+            return {"success": success, "notes": notes}
 
         elif action == "github":
             if gh_abuse.is_github_url(url):
@@ -98,12 +98,6 @@ def intel_reputation(link_id: int):
     if not link:
         raise HTTPException(status_code=404, detail="Link not found")
     try:
-        result = intel_mod.check_reputation(link["url"])
+        return intel_mod.check_reputation(link["url"])
     except Exception:
         raise HTTPException(status_code=502, detail="Reputation check failed")
-    # Strip exception messages from error-status checks before sending to client
-    result["checks"] = [
-        {k: v for k, v in c.items() if not (k == "detail" and c.get("status") == "error")}
-        for c in result.get("checks", [])
-    ]
-    return result

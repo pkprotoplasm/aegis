@@ -137,7 +137,8 @@ Aegis — Automated Effective Guard against Information Stealers
             server.sendmail(smtp_from, to_addr, msg.as_string())
         return True, f"Email sent to {to_addr}"
     except Exception as e:
-        return False, str(e)
+        print(f"hosting: SMTP error sending to {to_addr} — {e}")
+        return False, "Failed to send email"
 
 
 def report_hosting(url, reporter_context="", case_id="", triage_results=None):

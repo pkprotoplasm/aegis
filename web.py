@@ -126,14 +126,8 @@ def create_app():
         if not link:
             return jsonify({"error": "Link not found"}), 404
         try:
-            result = intel_mod.check_reputation(link["url"])
+            return jsonify(intel_mod.check_reputation(link["url"]))
         except Exception:
             return jsonify({"error": "Reputation check failed"}), 502
-        # Strip exception messages from error-status checks before sending to client
-        result["checks"] = [
-            {k: v for k, v in c.items() if not (k == "detail" and c.get("status") == "error")}
-            for c in result.get("checks", [])
-        ]
-        return jsonify(result)
 
     return app
