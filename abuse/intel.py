@@ -407,20 +407,20 @@ def check_urlscan(url, stored_uuid=None):
     """
     api_key = os.getenv("URLSCAN_API_KEY", "")
     base_headers = {"User-Agent": "aegis-reporter/1.0"}
+    # Unlisted scans require the API key to fetch results
+    auth_headers = {**base_headers, "API-Key": api_key} if api_key else base_headers
 
     # If we have a UUID from a scan submitted at report time, fetch it directly
     if stored_uuid:
         try:
             resp = requests.get(
                 f"https://urlscan.io/api/v1/result/{stored_uuid}/",
-                headers=base_headers,
+                headers=auth_headers,
                 timeout=15,
             )
             if resp.status_code == 200:
                 return _build_urlscan_result(resp.json(), uuid=stored_uuid)
             if resp.status_code == 404:
-                # Scan still processing — return pending state with screenshot URL
-                # (urlscan.io makes the screenshot available even before the result endpoint)
                 return {
                     "status": "pending",
                     "uuid": stored_uuid,
@@ -468,12 +468,12 @@ def check_urlscan(url, stored_uuid=None):
         if not uuid:
             return {"status": "error"}
 
-        # Poll up to 40 seconds for results (result endpoint is public)
+        # Poll up to 40 seconds — unlisted scans need auth_headers here too
         result_endpoint = f"https://urlscan.io/api/v1/result/{uuid}/"
         for _ in range(8):
             time.sleep(5)
             try:
-                r = requests.get(result_endpoint, headers=base_headers, timeout=15)
+                r = requests.get(result_endpoint, headers=auth_headers, timeout=15)
                 if r.status_code == 200:
                     return _build_urlscan_result(r.json(), uuid=uuid)
             except Exception:
