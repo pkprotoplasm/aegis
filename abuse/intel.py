@@ -370,22 +370,75 @@ def _build_urlscan_result(data, uuid=None):
     }
 
 
-def check_urlscan(url):
+def submit_urlscan(url):
     """
-    Search urlscan.io for an existing scan of a URL.
-    If URLSCAN_API_KEY is set and no existing scan is found, submit one and poll.
+    Submit a URL to urlscan.io for scanning and return the UUID immediately.
+    Returns the UUID string, or None if submission failed or no API key is configured.
     """
     api_key = os.getenv("URLSCAN_API_KEY", "")
-    headers = {"User-Agent": "aegis-reporter/1.0"}
-    if api_key:
-        headers["API-Key"] = api_key
+    if not api_key:
+        return None
+    try:
+        resp = requests.post(
+            "https://urlscan.io/api/v1/scan/",
+            json={"url": url, "visibility": "unlisted"},
+            headers={
+                "User-Agent": "aegis-reporter/1.0",
+                "API-Key": api_key,
+                "Content-Type": "application/json",
+            },
+            timeout=15,
+        )
+        if resp.status_code == 429:
+            print(f"intel: urlscan.io rate limit hit for {url}")
+            return None
+        resp.raise_for_status()
+        return resp.json().get("uuid")
+    except Exception as e:
+        print(f"intel: urlscan.io submit error for {url} — {e}")
+        return None
 
-    # Search for existing scans
+
+def check_urlscan(url, stored_uuid=None):
+    """
+    Return urlscan.io results for a URL.
+    If stored_uuid is provided (from a scan submitted at report time), fetch that result directly.
+    Otherwise search by domain, then submit a new scan if URLSCAN_API_KEY is configured.
+    """
+    api_key = os.getenv("URLSCAN_API_KEY", "")
+    base_headers = {"User-Agent": "aegis-reporter/1.0"}
+
+    # If we have a UUID from a scan submitted at report time, fetch it directly
+    if stored_uuid:
+        try:
+            resp = requests.get(
+                f"https://urlscan.io/api/v1/result/{stored_uuid}/",
+                headers=base_headers,
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                return _build_urlscan_result(resp.json(), uuid=stored_uuid)
+            if resp.status_code == 404:
+                # Scan still processing — return pending state with screenshot URL
+                # (urlscan.io makes the screenshot available even before the result endpoint)
+                return {
+                    "status": "pending",
+                    "uuid": stored_uuid,
+                    "report_url": f"https://urlscan.io/result/{stored_uuid}/",
+                    "screenshot_url": f"https://urlscan.io/screenshots/{stored_uuid}.png",
+                }
+        except Exception as e:
+            print(f"intel: urlscan.io result fetch error for {stored_uuid} — {e}")
+            # Fall through to domain search
+
+    # Search by domain — simpler query, avoids WAF issues with full URLs,
+    # and finds any scan of the site (not just the exact path).
+    domain = urlparse(url).hostname or ""
     try:
         resp = requests.get(
             "https://urlscan.io/api/v1/search/",
-            params={"q": f'page.url:"{url}"', "size": "1", "sort": "date:desc"},
-            headers=headers,
+            params={"q": f"page.domain:{domain}", "size": 1},
+            headers=base_headers,
             timeout=15,
         )
         resp.raise_for_status()
@@ -399,12 +452,13 @@ def check_urlscan(url):
     if not api_key:
         return {"status": "no_key"}
 
-    # Submit new scan
+    # Submit new scan — API key required here
+    submit_headers = {**base_headers, "API-Key": api_key, "Content-Type": "application/json"}
     try:
         resp = requests.post(
             "https://urlscan.io/api/v1/scan/",
             json={"url": url, "visibility": "unlisted"},
-            headers={**headers, "Content-Type": "application/json"},
+            headers=submit_headers,
             timeout=15,
         )
         if resp.status_code == 429:
@@ -414,12 +468,12 @@ def check_urlscan(url):
         if not uuid:
             return {"status": "error"}
 
-        # Poll up to 40 seconds for results
+        # Poll up to 40 seconds for results (result endpoint is public)
         result_endpoint = f"https://urlscan.io/api/v1/result/{uuid}/"
         for _ in range(8):
             time.sleep(5)
             try:
-                r = requests.get(result_endpoint, headers=headers, timeout=15)
+                r = requests.get(result_endpoint, headers=base_headers, timeout=15)
                 if r.status_code == 200:
                     return _build_urlscan_result(r.json(), uuid=uuid)
             except Exception:
