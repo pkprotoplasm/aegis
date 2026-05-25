@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "predev": "cp ../aegis-logo.svg public/aegis-logo.svg",
+    "predev": "cp ../aegis-logo.svg public/aegis-logo.svg 2>/dev/null || true",
     "dev": "vite",
-    "prebuild": "cp ../aegis-logo.svg public/aegis-logo.svg",
+    "prebuild": "cp ../aegis-logo.svg public/aegis-logo.svg 2>/dev/null || true",
     "build": "vite build",
     "preview": "vite preview"
   },

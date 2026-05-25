@@ -49,6 +49,9 @@ jobs:
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
+      - name: Stage logo for web build
+        run: cp aegis-logo.svg web/public/aegis-logo.svg
+
       - name: Build and push web
         uses: docker/build-push-action@v5
         with:
