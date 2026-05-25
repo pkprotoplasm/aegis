@@ -4,6 +4,7 @@ import { api } from '../api.js'
 import StatusBadge from './StatusBadge.jsx'
 import IntelPanel from './IntelPanel.jsx'
 import ActionLog from './ActionLog.jsx'
+import { formatTime } from '../utils.js'
 
 // ─── Flash Alert ──────────────────────────────────────────────────────────────
 
@@ -335,7 +336,7 @@ function NotesPanel({ reportId, notes, onUpdated, onFlash }) {
             <div key={n.id} className="card border-secondary mb-2">
               <div className="card-header d-flex justify-content-between align-items-center py-1 px-3 small text-muted">
                 <span className="fw-semibold">{n.admin_name}</span>
-                <span>{n.created_at.substring(0, 16).replace('T', ' ')} UTC</span>
+                <span>{formatTime(n.created_at)}</span>
               </div>
               <div className="card-body py-2 px-3" style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>
                 {n.note}
@@ -480,7 +481,7 @@ function ProviderResponses({ responses }) {
         </div>
         {r.received_at && (
           <span className="text-muted small">
-            {r.received_at.substring(0, 16).replace('T', ' ')}
+            {formatTime(r.received_at)}
           </span>
         )}
       </div>
@@ -615,7 +616,7 @@ export default function ReportDetail() {
             {report.reported_at && (
               <div className="text-muted small mt-1">
                 <i className="bi bi-clock me-1"></i>
-                {report.reported_at.substring(0, 16).replace('T', ' ')} UTC
+                {formatTime(report.reported_at)}
               </div>
             )}
           </InfoCard>

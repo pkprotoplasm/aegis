@@ -1,4 +1,5 @@
 import React from 'react'
+import { formatTime } from '../utils.js'
 
 function actionIcon(status) {
   switch (status) {
@@ -47,7 +48,7 @@ export default function ActionLog({ actions }) {
             )}
             {a.sent_at && (
               <span className="text-muted ms-1">
-                ({a.sent_at.substring(0, 16).replace('T', ' ')})
+                ({formatTime(a.sent_at)})
               </span>
             )}
             {a.notes && (

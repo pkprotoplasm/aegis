@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '../api.js'
 import StatusBadge from './StatusBadge.jsx'
+import { formatTime } from '../utils.js'
 
 const TABS = [
   { label: 'Pending', value: 'pending' },
@@ -103,7 +104,7 @@ export default function ReportList() {
                       <span className="badge bg-secondary">{r.link_count}</span>
                     </td>
                     <td className="text-muted" style={{ whiteSpace: 'nowrap' }}>
-                      {r.reported_at ? r.reported_at.substring(0, 16).replace('T', ' ') : '—'}
+                      {formatTime(r.reported_at)}
                     </td>
                   </tr>
                 ))

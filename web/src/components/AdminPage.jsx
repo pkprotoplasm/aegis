@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { api } from '../api.js'
+import { formatDate } from '../utils.js'
 
 function RoleBadge({ role }) {
   return role === 'super_admin'
@@ -105,7 +106,7 @@ export default function AdminPage({ currentUser }) {
                     </td>
                     <td className="font-monospace text-muted small">{a.discord_id}</td>
                     <td><RoleBadge role={a.role} /></td>
-                    <td className="text-muted small">{a.added_at.substring(0, 10)}</td>
+                    <td className="text-muted small">{formatDate(a.added_at)}</td>
                     <td className="text-end">
                       {a.role !== 'super_admin' && (
                         <button
