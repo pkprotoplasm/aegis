@@ -19,7 +19,8 @@ A Discord bot that lets server members report phishing links sent by suspected s
   - Netcraft phishing report API submission (no account required)
   - Google Safe Browsing report form (pre-filled link)
   - GitHub abuse form (for direct `github.com` links)
-- **Intelligence panels** per link — WHOIS data, host/ASN info, RBL/reputation checks (URLhaus, Spamhaus DBL, SURBL; optionally Google Safe Browsing and VirusTotal), and urlscan.io page screenshots with verdicts
+- **Intelligence panels** per link — WHOIS data, host/ASN info, RBL/reputation checks (URLhaus, OpenPhish, Spamhaus DBL, SURBL; optionally Google Safe Browsing and VirusTotal), and urlscan.io page screenshots with verdicts
+- **Submission-time threat scanning** — when a report is submitted, each URL is automatically checked for file-sharing links (Dropbox, Mega, Google Drive, etc.), looked up in OpenPhish, checked against Google Safe Browsing (if configured), and submitted to urlscan.io (if configured). Any findings are logged as an internal case note, set as the reporter message, and DMed to the reporter immediately with a safety warning
 - **IMAP monitor** — polls your abuse inbox for provider replies, stores them against the case, and DMs the original reporter
 - **Internal case notes** — admins can attach timestamped notes to any case (not visible to reporters)
 - **Reporter messages** — admins can set a custom message on a case that is shown to the reporter in `/status` replies and status-change notifications, without exposing the admin's identity
@@ -186,7 +187,7 @@ Enable IMAP in Gmail settings and generate an [App Password](https://myaccount.g
 | `/add-admin @user` | Super admin | Grants dashboard access to a Discord member (native user picker) |
 | `/remove-admin @user` | Super admin | Revokes dashboard access |
 
-After submitting a report, the user receives an ephemeral confirmation with their `AEGIS-XXXXXXXX` case ID. If IMAP is configured and a provider replies, the reporter is automatically DM'd.
+After submitting a report, the user receives an ephemeral confirmation with their `AEGIS-XXXXXXXX` case ID. In the background, each submitted URL is scanned for threats (file-sharing links, OpenPhish, Google Safe Browsing, urlscan.io). If anything is flagged, the reporter receives a DM safety warning immediately and the findings are recorded as an internal case note. If IMAP is configured and a provider replies, the reporter is automatically DM'd.
 
 ### Web dashboard
 
@@ -210,8 +211,8 @@ Open `http://localhost:5000` (or the configured `WEB_PORT`). The dashboard is se
 |---|---|
 | WHOIS | Registrar, dates, name servers, registrant, domain age badge |
 | Host Info | IP, ASN, network, provider, abuse contact |
-| RBL Check | URLhaus, Spamhaus DBL, SURBL (always); Google Safe Browsing, VirusTotal (if keys configured) |
-| urlscan.io | Page screenshot, verdict/score, final URL, page metadata; submits a new scan if `URLSCAN_API_KEY` is set and no existing scan is found |
+| RBL Check | URLhaus, OpenPhish, Spamhaus DBL, SURBL (always, no key required); Google Safe Browsing, VirusTotal (if keys configured) |
+| urlscan.io | Page screenshot, verdict/score, final URL, page metadata; scan is submitted automatically at report time (if `URLSCAN_API_KEY` is set) so admins see the site as it appeared when reported |
 
 All actions are logged per link with timestamps and outcome (`sent` / `failed` / `pending`). Provider responses appear in a dedicated section below the links once received.
 
