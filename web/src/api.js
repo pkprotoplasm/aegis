@@ -49,4 +49,7 @@ export const api = {
 
   getPrivacyPolicy: () => request('GET', '/privacy'),
   setPrivacyPolicy: (content) => request('PUT', '/privacy', { content }),
+
+  getToS: () => request('GET', '/tos'),
+  setToS: (content) => request('PUT', '/tos', { content }),
 }

@@ -53,6 +53,54 @@ function PrivacyEditor({ showFlash }) {
   )
 }
 
+function ToSEditor({ showFlash }) {
+  const [content, setContent] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving]   = useState(false)
+
+  useEffect(() => {
+    api.getToS()
+      .then((data) => setContent(data.content))
+      .catch((err) => showFlash('error', `Failed to load terms of service: ${err.message}`))
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      await api.setToS(content)
+      showFlash('success', 'Terms of service saved.')
+    } catch (err) {
+      showFlash('error', `Failed to save: ${err.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="text-center py-4">
+        <div className="spinner-border spinner-border-sm text-secondary"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div data-color-mode="dark">
+      <MDEditor value={content} onChange={setContent} height={400} />
+      <div className="d-flex align-items-center gap-3 mt-3">
+        <button className="btn btn-sm btn-primary" onClick={handleSave} disabled={saving}>
+          {saving ? <span className="spinner-border spinner-border-sm me-1" /> : null}
+          Save
+        </button>
+        <a href="/tos" target="_blank" rel="noreferrer" className="text-muted small">
+          <i className="bi bi-box-arrow-up-right me-1"></i>Preview public page
+        </a>
+      </div>
+    </div>
+  )
+}
+
 function RoleBadge({ role }) {
   return role === 'super_admin'
     ? <span className="badge bg-warning text-dark"><i className="bi bi-star-fill me-1"></i>Super Admin</span>
@@ -193,6 +241,23 @@ export default function AdminPage({ currentUser }) {
             {' '}and is publicly accessible without login. Use Markdown to format the document.
           </p>
           <PrivacyEditor showFlash={showFlash} />
+        </div>
+      </div>
+
+      {/* Terms of service editor */}
+      <div className="card border-secondary mb-4">
+        <div className="card-header text-muted small text-uppercase fw-semibold" style={{ letterSpacing: '0.05em' }}>
+          Terms of Service
+        </div>
+        <div className="card-body">
+          <p className="text-muted small mb-3">
+            This content is shown at{' '}
+            <a href="/tos" target="_blank" rel="noreferrer" className="text-muted">
+              /tos
+            </a>
+            {' '}and is publicly accessible without login. Use Markdown to format the document.
+          </p>
+          <ToSEditor showFlash={showFlash} />
         </div>
       </div>
 

@@ -36,7 +36,10 @@ export default function LoginPage({ dryRun }) {
             </a>
           </div>
         </div>
-        <a href="/privacy" className="text-muted small">Privacy Policy</a>
+        <div className="d-flex gap-3">
+          <a href="/tos" className="text-muted small">Terms of Service</a>
+          <a href="/privacy" className="text-muted small">Privacy Policy</a>
+        </div>
       </div>
     </div>
   )

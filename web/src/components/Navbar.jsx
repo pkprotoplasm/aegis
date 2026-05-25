@@ -67,6 +67,11 @@ export default function Navbar({ user }) {
                 </span>
               </li>
               <li className="nav-item">
+                <a className="nav-link text-secondary" href="/tos" target="_blank" rel="noreferrer" style={{ fontSize: '0.875rem' }}>
+                  Terms
+                </a>
+              </li>
+              <li className="nav-item">
                 <a className="nav-link text-secondary" href="/privacy" target="_blank" rel="noreferrer" style={{ fontSize: '0.875rem' }}>
                   Privacy
                 </a>

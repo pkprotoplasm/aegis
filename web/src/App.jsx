@@ -7,6 +7,7 @@ import ReportList from './components/ReportList.jsx'
 import ReportDetail from './components/ReportDetail.jsx'
 import AdminPage from './components/AdminPage.jsx'
 import PrivacyPage from './components/PrivacyPage.jsx'
+import ToSPage from './components/ToSPage.jsx'
 import { api } from './api.js'
 
 export default function App() {
@@ -14,9 +15,8 @@ export default function App() {
   const [user, setUser]     = useState(undefined) // undefined = loading
   const [dryRun, setDryRun] = useState(false)
 
-  if (location.pathname === '/privacy') {
-    return <PrivacyPage />
-  }
+  if (location.pathname === '/privacy') return <PrivacyPage />
+  if (location.pathname === '/tos')     return <ToSPage />
 
   useEffect(() => {
     api.getConfig()
