@@ -165,4 +165,5 @@ Aegis — Automated Effective Guard against Information Stealers
             server.sendmail(smtp_from, "abuse@github.com", msg.as_string())
         return True, f"Abuse email sent to abuse@github.com ({pages_identity})"
     except Exception as e:
-        return False, str(e)
+        print(f"github: SMTP error sending to abuse@github.com — {e}")
+        return False, "Failed to send email"
