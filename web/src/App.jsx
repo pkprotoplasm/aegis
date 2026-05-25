@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import Navbar from './components/Navbar.jsx'
 import DryRunBanner from './components/DryRunBanner.jsx'
 import LoginPage from './components/LoginPage.jsx'
@@ -44,8 +44,9 @@ export default function App() {
       {dryRun && <DryRunBanner />}
       <div className="container-fluid py-4 px-4">
         <Routes>
-          <Route path="/"           element={<ReportList />} />
-          <Route path="/report/:id" element={<ReportDetail />} />
+          <Route path="/"            element={<Navigate to="/all" replace />} />
+          <Route path="/:status"     element={<ReportList />} />
+          <Route path="/report/:id"  element={<ReportDetail />} />
           {user.role === 'super_admin' && (
             <Route path="/admins" element={<AdminPage currentUser={user} />} />
           )}

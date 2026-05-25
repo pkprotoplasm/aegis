@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link, useSearchParams, useLocation } from 'react-router-dom'
+import { Link, useParams, useLocation } from 'react-router-dom'
 
 const TABS = [
   { label: 'Pending',   value: 'pending'   },
@@ -9,10 +9,8 @@ const TABS = [
 ]
 
 export default function Navbar({ user }) {
-  const [searchParams] = useSearchParams()
+  const { status: currentStatus } = useParams()
   const location = useLocation()
-  const currentStatus = searchParams.get('status') || 'all'
-  const isListPage = location.pathname === '/'
 
   return (
     <nav className="navbar navbar-expand-lg navbar-dark bg-dark border-bottom border-secondary">
@@ -32,12 +30,12 @@ export default function Navbar({ user }) {
         <div className="collapse navbar-collapse" id="navbarNav">
           <ul className="navbar-nav me-auto">
             {TABS.map((tab) => {
-              const isActive = isListPage && currentStatus === tab.value
+              const isActive = currentStatus === tab.value
               return (
                 <li className="nav-item" key={tab.value}>
                   <Link
                     className={`nav-link${isActive ? ' active fw-semibold' : ''}`}
-                    to={`/?status=${tab.value}`}
+                    to={`/${tab.value}`}
                   >
                     {tab.label}
                   </Link>

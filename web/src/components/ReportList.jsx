@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams, Link } from 'react-router-dom'
+import { useNavigate, useParams, Link } from 'react-router-dom'
 import { api } from '../api.js'
 import StatusBadge from './StatusBadge.jsx'
 
@@ -15,10 +15,8 @@ export default function ReportList() {
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [searchParams] = useSearchParams()
+  const { status = 'all' } = useParams()
   const navigate = useNavigate()
-
-  const status = searchParams.get('status') || 'all'
 
   useEffect(() => {
     setLoading(true)
@@ -43,7 +41,7 @@ export default function ReportList() {
           <li className="nav-item" key={tab.value}>
             <Link
               className={`nav-link${status === tab.value ? ' active' : ''}`}
-              to={`/?status=${tab.value}`}
+              to={`/${tab.value}`}
             >
               {tab.label}
             </Link>
