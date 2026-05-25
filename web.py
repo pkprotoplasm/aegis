@@ -57,42 +57,44 @@ def create_app():
 
         case_id = report.get("case_id", "") or ""
 
-        if action == "whois":
-            success, target, notes = whois_lookup.report_whois(url, context, case_id)
-            db.log_abuse_action(link_id, "whois_email", target,
-                                "sent" if success else "failed", notes)
-            flash(f"WHOIS: {notes}", "success" if success else "error")
+        try:
+            if action == "whois":
+                success, target, notes = whois_lookup.report_whois(url, context, case_id)
+                db.log_abuse_action(link_id, "whois_email", target,
+                                    "sent" if success else "failed", notes)
+                flash(f"WHOIS: {notes}", "success" if success else "error")
 
-        elif action == "hosting":
-            success, target, notes, form_url = hosting.report_hosting(url, context, case_id)
-            db.log_abuse_action(link_id, "hosting", target,
-                                "sent" if success else "failed", notes)
-            flash(f"Hosting: {notes}", "success" if success else "error")
+            elif action == "hosting":
+                success, target, notes, form_url = hosting.report_hosting(url, context, case_id)
+                db.log_abuse_action(link_id, "hosting", target,
+                                    "sent" if success else "failed", notes)
+                flash(f"Hosting: {notes}", "success" if success else "error")
 
-        elif action == "netcraft":
-            success, notes = phishing.submit_to_netcraft(url)
-            db.log_abuse_action(link_id, "netcraft", "report.netcraft.com",
-                                "sent" if success else "failed", notes)
-            flash(f"Netcraft: {notes}", "success" if success else "error")
+            elif action == "netcraft":
+                success, notes = phishing.submit_to_netcraft(url)
+                db.log_abuse_action(link_id, "netcraft", "report.netcraft.com",
+                                    "sent" if success else "failed", notes)
+                flash(f"Netcraft: {notes}", "success" if success else "error")
 
-        elif action == "github":
-            if gh_abuse.is_github_url(url):
-                report_url, target = gh_abuse.get_github_report_url(url)
-                db.log_abuse_action(link_id, "github", target, "pending",
-                                    f"Opened: {report_url}")
-                # Redirect to GitHub form
+            elif action == "github":
+                if gh_abuse.is_github_url(url):
+                    report_url, target = gh_abuse.get_github_report_url(url)
+                    db.log_abuse_action(link_id, "github", target, "pending",
+                                        f"Opened: {report_url}")
+                    return redirect(report_url)
+                else:
+                    flash("Not a GitHub URL.", "error")
+
+            elif action == "safebrowsing":
+                report_url = phishing.get_google_safebrowsing_url(url)
+                db.log_abuse_action(link_id, "safebrowsing", "safebrowsing.google.com",
+                                    "pending", f"Opened: {report_url}")
                 return redirect(report_url)
+
             else:
-                flash("Not a GitHub URL.", "error")
-
-        elif action == "safebrowsing":
-            report_url = phishing.get_google_safebrowsing_url(url)
-            db.log_abuse_action(link_id, "safebrowsing", "safebrowsing.google.com",
-                                "pending", f"Opened: {report_url}")
-            return redirect(report_url)
-
-        else:
-            flash(f"Unknown action: {action}", "error")
+                flash("Unknown action.", "error")
+        except Exception:
+            flash("Action failed. Please try again.", "error")
 
         return redirect(url_for("report_detail", report_id=report_id))
 
@@ -102,7 +104,10 @@ def create_app():
         if not link:
             return jsonify({"error": "Link not found"}), 404
         domain = link.get("domain") or urlparse(link["url"]).hostname or ""
-        return jsonify(intel_mod.get_whois(domain))
+        try:
+            return jsonify(intel_mod.get_whois(domain))
+        except Exception:
+            return jsonify({"error": "WHOIS lookup failed"}), 502
 
     @app.route("/link/<int:link_id>/intel/host")
     def link_intel_host(link_id):
@@ -110,13 +115,19 @@ def create_app():
         if not link:
             return jsonify({"error": "Link not found"}), 404
         domain = link.get("domain") or urlparse(link["url"]).hostname or ""
-        return jsonify(intel_mod.get_host_info(domain))
+        try:
+            return jsonify(intel_mod.get_host_info(domain))
+        except Exception:
+            return jsonify({"error": "Host lookup failed"}), 502
 
     @app.route("/link/<int:link_id>/intel/reputation")
     def link_intel_reputation(link_id):
         link = db.get_link(link_id)
         if not link:
             return jsonify({"error": "Link not found"}), 404
-        return jsonify(intel_mod.check_reputation(link["url"]))
+        try:
+            return jsonify(intel_mod.check_reputation(link["url"]))
+        except Exception:
+            return jsonify({"error": "Reputation check failed"}), 502
 
     return app
