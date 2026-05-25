@@ -15,9 +15,6 @@ export default function App() {
   const [user, setUser]     = useState(undefined) // undefined = loading
   const [dryRun, setDryRun] = useState(false)
 
-  if (location.pathname === '/privacy') return <PrivacyPage />
-  if (location.pathname === '/tos')     return <ToSPage />
-
   useEffect(() => {
     api.getConfig()
       .then((c) => setDryRun(c.dry_run))
@@ -27,6 +24,9 @@ export default function App() {
       .then(setUser)
       .catch(() => setUser(null))
   }, [])
+
+  if (location.pathname === '/privacy') return <PrivacyPage />
+  if (location.pathname === '/tos')     return <ToSPage />
 
   // Still resolving session
   if (user === undefined) {
