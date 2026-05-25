@@ -40,4 +40,10 @@ export const api = {
   getWhois: (id) => request('GET', `/links/${id}/intel/whois`),
   getHost: (id) => request('GET', `/links/${id}/intel/host`),
   getReputation: (id) => request('GET', `/links/${id}/intel/reputation`),
+
+  addNote: (reportId, note) =>
+    request('POST', `/reports/${reportId}/notes`, { note }),
+
+  setReporterMessage: (reportId, message) =>
+    request('PUT', `/reports/${reportId}/reporter-message`, { message }),
 }

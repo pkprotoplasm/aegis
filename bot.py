@@ -72,6 +72,13 @@ def _build_status_embed(report):
             inline=False,
         )
 
+    if report.get("reporter_message"):
+        embed.add_field(
+            name="Message from our team",
+            value=report["reporter_message"],
+            inline=False,
+        )
+
     embed.set_footer(text="Responses are polled from the abuse inbox periodically.")
     return embed
 

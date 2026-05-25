@@ -21,6 +21,8 @@ A Discord bot that lets server members report phishing links sent by suspected s
   - GitHub abuse form (for direct `github.com` links)
 - **Intelligence panels** per link — WHOIS data, host/ASN info, and RBL/reputation checks (URLhaus, Spamhaus DBL, SURBL; optionally Google Safe Browsing and VirusTotal)
 - **IMAP monitor** — polls your abuse inbox for provider replies, stores them against the case, and DMs the original reporter
+- **Internal case notes** — admins can attach timestamped notes to any case (not visible to reporters)
+- **Reporter messages** — admins can set a custom message on a case that is shown to the reporter in `/status` replies and status-change notifications, without exposing the admin's identity
 - **Dry-run mode** — set `DRY_RUN=1` to log all outbound actions without sending anything; a banner appears in the dashboard
 
 ---
@@ -208,6 +210,10 @@ Open `http://localhost:5000` (or the configured `WEB_PORT`). The dashboard is se
 | RBL Check | URLhaus, Spamhaus DBL, SURBL (always); Google Safe Browsing, VirusTotal (if keys configured) |
 
 All actions are logged per link with timestamps and outcome (`sent` / `failed` / `pending`). Provider responses appear in a dedicated section below the links once received.
+
+**Internal notes** — free-text notes visible only to admins. Each note records the author's name and timestamp.
+
+**Reporter message** — a single message field on each case. When set, it appears as "Message from our team" in the reporter's `/status` embed and is included in status-change DMs. The admin's identity is never shown to the reporter. Clearing the field removes it from future notifications.
 
 ---
 

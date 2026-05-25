@@ -302,6 +302,166 @@ function LinkCard({ link, onAction, onFlash }) {
   )
 }
 
+// ─── Case Notes ──────────────────────────────────────────────────────────────
+
+function NotesPanel({ reportId, notes, onUpdated, onFlash }) {
+  const [text, setText] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!text.trim() || saving) return
+    setSaving(true)
+    try {
+      await api.addNote(reportId, text.trim())
+      setText('')
+      onFlash({ type: 'success', message: 'Note added.' })
+      onUpdated()
+    } catch (err) {
+      onFlash({ type: 'error', message: `Failed to add note: ${err.message}` })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mb-4">
+      <div className="text-muted small text-uppercase fw-semibold mb-2" style={{ letterSpacing: '0.05em' }}>
+        Internal Notes
+      </div>
+      {notes && notes.length > 0 ? (
+        <div className="mb-3">
+          {notes.map((n) => (
+            <div key={n.id} className="card border-secondary mb-2">
+              <div className="card-header d-flex justify-content-between align-items-center py-1 px-3 small text-muted">
+                <span className="fw-semibold">{n.admin_name}</span>
+                <span>{n.created_at.substring(0, 16).replace('T', ' ')} UTC</span>
+              </div>
+              <div className="card-body py-2 px-3" style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>
+                {n.note}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-muted small">No notes yet.</p>
+      )}
+      <form onSubmit={handleSubmit} className="d-flex gap-2 align-items-start">
+        <textarea
+          className="form-control form-control-sm"
+          rows={2}
+          placeholder="Add an internal note…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          disabled={saving}
+          style={{ resize: 'vertical' }}
+        />
+        <button className="btn btn-sm btn-outline-secondary text-nowrap" type="submit" disabled={saving || !text.trim()}>
+          {saving ? <span className="spinner-border spinner-border-sm" /> : 'Add Note'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
+// ─── Reporter Message ─────────────────────────────────────────────────────────
+
+function ReporterMessagePanel({ reportId, currentMessage, onUpdated, onFlash }) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState(currentMessage || '')
+  const [saving, setSaving] = useState(false)
+
+  function startEdit() {
+    setText(currentMessage || '')
+    setEditing(true)
+  }
+
+  function cancelEdit() {
+    setEditing(false)
+    setText(currentMessage || '')
+  }
+
+  async function handleSave() {
+    if (saving) return
+    setSaving(true)
+    try {
+      await api.setReporterMessage(reportId, text)
+      onFlash({ type: 'success', message: 'Reporter message updated.' })
+      setEditing(false)
+      onUpdated()
+    } catch (err) {
+      onFlash({ type: 'error', message: `Failed to update message: ${err.message}` })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="mb-4">
+      <div className="text-muted small text-uppercase fw-semibold mb-2" style={{ letterSpacing: '0.05em' }}>
+        Reporter Message
+      </div>
+      {!editing ? (
+        <div className="d-flex align-items-start gap-2">
+          <div className="flex-grow-1" style={{ fontSize: '0.9rem' }}>
+            {currentMessage ? (
+              <span style={{ whiteSpace: 'pre-wrap' }}>{currentMessage}</span>
+            ) : (
+              <span className="text-muted fst-italic">No message set — reporter sees a generic status update.</span>
+            )}
+          </div>
+          <button className="btn btn-sm btn-outline-secondary text-nowrap" onClick={startEdit}>
+            {currentMessage ? 'Edit' : 'Set message'}
+          </button>
+        </div>
+      ) : (
+        <div>
+          <textarea
+            className="form-control form-control-sm mb-2"
+            rows={3}
+            placeholder="Enter a message to show the reporter in status updates…"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            disabled={saving}
+            style={{ resize: 'vertical' }}
+            autoFocus
+          />
+          <div className="d-flex gap-2">
+            <button className="btn btn-sm btn-primary" onClick={handleSave} disabled={saving}>
+              {saving ? <span className="spinner-border spinner-border-sm me-1" /> : null}
+              Save
+            </button>
+            <button className="btn btn-sm btn-outline-secondary" onClick={cancelEdit} disabled={saving}>
+              Cancel
+            </button>
+            {currentMessage && (
+              <button
+                className="btn btn-sm btn-outline-danger ms-auto"
+                disabled={saving}
+                onClick={async () => {
+                  setSaving(true)
+                  try {
+                    await api.setReporterMessage(reportId, '')
+                    onFlash({ type: 'success', message: 'Reporter message cleared.' })
+                    setEditing(false)
+                    onUpdated()
+                  } catch (err) {
+                    onFlash({ type: 'error', message: `Failed to clear message: ${err.message}` })
+                  } finally {
+                    setSaving(false)
+                  }
+                }}
+              >
+                Clear message
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Provider Responses ───────────────────────────────────────────────────────
 
 function ProviderResponses({ responses }) {
@@ -484,6 +644,22 @@ export default function ReportDetail() {
           onFlash={setFlash}
         />
       </div>
+
+      {/* Internal Notes */}
+      <NotesPanel
+        reportId={report.id}
+        notes={report.case_notes}
+        onUpdated={loadReport}
+        onFlash={setFlash}
+      />
+
+      {/* Reporter Message */}
+      <ReporterMessagePanel
+        reportId={report.id}
+        currentMessage={report.reporter_message}
+        onUpdated={loadReport}
+        onFlash={setFlash}
+      />
 
       {/* Reported Links */}
       <div className="mb-4">

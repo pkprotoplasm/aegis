@@ -110,11 +110,21 @@ def init_db():
                 received_at TEXT NOT NULL,
                 notified INTEGER NOT NULL DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS case_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                report_id INTEGER NOT NULL REFERENCES reports(id),
+                admin_id TEXT NOT NULL,
+                admin_name TEXT NOT NULL,
+                note TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
         """)
-        # Migration: add case_id if this DB was created before the column existed
+        # Migrations for columns added after initial schema
         existing_cols = {row[1] for row in db.execute("PRAGMA table_info(reports)")}
         if "case_id" not in existing_cols:
             db.execute("ALTER TABLE reports ADD COLUMN case_id TEXT")
+        if "reporter_message" not in existing_cols:
+            db.execute("ALTER TABLE reports ADD COLUMN reporter_message TEXT")
 
 
 def create_report(reporter_id, reporter_name, scammer_id, scammer_name,
@@ -170,6 +180,11 @@ def _hydrate_report(db, row):
         (report["id"],)
     ).fetchall()
     report["provider_responses"] = [dict(r) for r in responses]
+    notes = db.execute(
+        "SELECT * FROM case_notes WHERE report_id = ? ORDER BY created_at",
+        (report["id"],)
+    ).fetchall()
+    report["case_notes"] = [dict(n) for n in notes]
     return report
 
 
@@ -301,6 +316,24 @@ def get_link(link_id):
 def update_report_status(report_id, status):
     with get_db() as db:
         db.execute("UPDATE reports SET status = ? WHERE id = ?", (status, report_id))
+
+
+def set_reporter_message(report_id, message):
+    with get_db() as db:
+        db.execute(
+            "UPDATE reports SET reporter_message = ? WHERE id = ?",
+            (message or None, report_id),
+        )
+
+
+def add_case_note(report_id, admin_id, admin_name, note):
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as db:
+        db.execute(
+            """INSERT INTO case_notes (report_id, admin_id, admin_name, note, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (report_id, admin_id, admin_name, note, now),
+        )
 
 
 def log_abuse_action(link_id, action_type, target, status, notes=""):
