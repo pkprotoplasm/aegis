@@ -79,7 +79,12 @@ function StatusButtons({ reportId, currentStatus, onUpdated, onFlash }) {
 // ─── Link Card ────────────────────────────────────────────────────────────────
 
 function isGitHubUrl(url) {
-  return url && (url.includes('github.com/') || (url.includes('github.io') && !url.match(/\w+\.github\.io/)))
+  try {
+    const { hostname } = new URL(url)
+    return hostname === 'github.com' || hostname.endsWith('.github.com')
+  } catch {
+    return false
+  }
 }
 
 function LinkCard({ link, onAction, onFlash }) {
