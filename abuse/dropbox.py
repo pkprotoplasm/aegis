@@ -1,4 +1,4 @@
-"""Dropbox link detection and abuse reporting."""
+"""Dropbox link detection and abuse reporting, plus broad file-share link scanning."""
 import os
 import re
 import smtplib
@@ -17,6 +17,25 @@ _DROPBOX_RE = re.compile(
     r')',
     re.IGNORECASE,
 )
+
+# (compiled_pattern, display_name) — sites commonly used to distribute malware payloads
+_FILESHARE_PATTERNS: list[tuple[re.Pattern, str]] = [
+    (_DROPBOX_RE,                                                                       "Dropbox"),
+    (re.compile(r'https?://drive\.google\.com/(?:file|open|uc)[^\s"\'<>)]+',           re.IGNORECASE), "Google Drive"),
+    (re.compile(r'https?://mega\.(?:nz|co\.nz)/[^\s"\'<>)]+',                          re.IGNORECASE), "Mega"),
+    (re.compile(r'https?://(?:we\.tl|wetransfer\.com)/[^\s"\'<>)]+',                   re.IGNORECASE), "WeTransfer"),
+    (re.compile(r'https?://(?:www\.)?mediafire\.com/file/[^\s"\'<>)]+',                re.IGNORECASE), "MediaFire"),
+    (re.compile(r'https?://(?:app\.)?box\.com/s/[^\s"\'<>)]+',                         re.IGNORECASE), "Box"),
+    (re.compile(r'https?://(?:1drv\.ms|onedrive\.live\.com)/[^\s"\'<>)]+',             re.IGNORECASE), "OneDrive"),
+    (re.compile(r'https?://cdn\.discordapp\.com/attachments/[^\s"\'<>)]+',             re.IGNORECASE), "Discord CDN"),
+    (re.compile(r'https?://(?:www\.)?gofile\.io/[^\s"\'<>)]+',                         re.IGNORECASE), "Gofile"),
+    (re.compile(r'https?://pixeldrain\.com/[^\s"\'<>)]+',                              re.IGNORECASE), "Pixeldrain"),
+    (re.compile(r'https?://(?:www\.)?sendgb\.com/[^\s"\'<>)]+',                        re.IGNORECASE), "SendGB"),
+    (re.compile(r'https?://(?:www\.)?workupload\.com/[^\s"\'<>)]+',                    re.IGNORECASE), "WorkUpload"),
+    (re.compile(r'https?://transfer\.sh/[^\s"\'<>)]+',                                 re.IGNORECASE), "transfer.sh"),
+    (re.compile(r'https?://(?:www\.)?file\.io/[^\s"\'<>)]+',                           re.IGNORECASE), "file.io"),
+    (re.compile(r'https?://(?:files\.)?catbox\.moe/[^\s"\'<>)]+',                      re.IGNORECASE), "Catbox"),
+]
 
 _ABUSE_EMAIL = "abuse@dropbox.com"
 _MAX_BYTES   = 512 * 1024
@@ -57,6 +76,55 @@ def scan_for_dropbox_links(url, timeout=10):
         if link not in seen:
             seen.add(link)
             results.append(link)
+    return results
+
+
+def scan_for_fileshare_links(url, timeout=10):
+    """
+    Scan url (and its page body) for links to file-sharing / payload-hosting services.
+    Returns a list of {"site": name, "found_url": url} dicts, deduplicated.
+    The submitted url itself is checked first; if it matches, it is returned directly
+    without fetching the page body.
+    """
+    results, seen = [], set()
+
+    def _add(found_url, site):
+        if found_url not in seen:
+            seen.add(found_url)
+            results.append({"site": site, "found_url": found_url})
+
+    # Check if the submitted URL itself is a file-share link
+    for pattern, site in _FILESHARE_PATTERNS:
+        if pattern.match(url):
+            _add(url, site)
+            return results  # no need to fetch the page
+
+    # Fetch the page body and scan for embedded file-share links
+    try:
+        resp = requests.get(
+            url,
+            timeout=timeout,
+            headers={"User-Agent": "aegis-scanner/1.0"},
+            stream=True,
+            allow_redirects=True,
+        )
+        resp.raise_for_status()
+        ct = resp.headers.get("Content-Type", "")
+        if "html" not in ct and "text" not in ct:
+            return []
+        raw = b""
+        for chunk in resp.iter_content(8192):
+            raw += chunk
+            if len(raw) >= _MAX_BYTES:
+                break
+    except Exception:
+        return []
+
+    body = raw.decode("utf-8", errors="replace")
+    for pattern, site in _FILESHARE_PATTERNS:
+        for m in pattern.finditer(body):
+            _add(m.group(0).rstrip(".,;)"), site)
+
     return results
 
 
