@@ -19,7 +19,7 @@ A Discord bot that lets server members report phishing links sent by suspected s
   - Netcraft phishing report API submission (no account required)
   - Google Safe Browsing report form (pre-filled link)
   - GitHub abuse form (for direct `github.com` links)
-- **Intelligence panels** per link — WHOIS data, host/ASN info, and RBL/reputation checks (URLhaus, Spamhaus DBL, SURBL; optionally Google Safe Browsing and VirusTotal)
+- **Intelligence panels** per link — WHOIS data, host/ASN info, RBL/reputation checks (URLhaus, Spamhaus DBL, SURBL; optionally Google Safe Browsing and VirusTotal), and urlscan.io page screenshots with verdicts
 - **IMAP monitor** — polls your abuse inbox for provider replies, stores them against the case, and DMs the original reporter
 - **Internal case notes** — admins can attach timestamped notes to any case (not visible to reporters)
 - **Reporter messages** — admins can set a custom message on a case that is shown to the reporter in `/status` replies and status-change notifications, without exposing the admin's identity
@@ -128,6 +128,7 @@ Copy `.env.example` to `.env` and fill in the values.
 | `COOKIE_SECURE` | — | Set to `false` for local HTTP dev; must be `true` in production (default `true`) |
 | `GOOGLE_SAFE_BROWSING_API_KEY` | — | Enables GSB checks in the RBL panel (free key from Google Cloud Console) |
 | `VIRUSTOTAL_API_KEY` | — | Enables VirusTotal checks in the RBL panel (free tier available) |
+| `URLSCAN_API_KEY` | — | Enables automatic scan submission on urlscan.io when no existing scan is found (existing public scans are always searched for free) |
 | `TRIAGE_API_KEY` | — | Enables EXE submission to Recorded Future Triage for sandboxing (see [tria.ge](https://tria.ge)) |
 | `DRY_RUN` | — | Set to `1` to log all outbound actions without sending — a yellow banner appears in the dashboard |
 
@@ -210,6 +211,7 @@ Open `http://localhost:5000` (or the configured `WEB_PORT`). The dashboard is se
 | WHOIS | Registrar, dates, name servers, registrant, domain age badge |
 | Host Info | IP, ASN, network, provider, abuse contact |
 | RBL Check | URLhaus, Spamhaus DBL, SURBL (always); Google Safe Browsing, VirusTotal (if keys configured) |
+| urlscan.io | Page screenshot, verdict/score, final URL, page metadata; submits a new scan if `URLSCAN_API_KEY` is set and no existing scan is found |
 
 All actions are logged per link with timestamps and outcome (`sent` / `failed` / `pending`). Provider responses appear in a dedicated section below the links once received.
 

@@ -101,3 +101,14 @@ def intel_reputation(link_id: int):
         return intel_mod.check_reputation(link["url"])
     except Exception:
         raise HTTPException(status_code=502, detail="Reputation check failed")
+
+
+@router.get("/links/{link_id}/intel/urlscan")
+def intel_urlscan(link_id: int):
+    link = db.get_link(link_id)
+    if not link:
+        raise HTTPException(status_code=404, detail="Link not found")
+    try:
+        return intel_mod.check_urlscan(link["url"])
+    except Exception:
+        raise HTTPException(status_code=502, detail="urlscan.io lookup failed")
