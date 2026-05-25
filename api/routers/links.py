@@ -109,6 +109,6 @@ def intel_urlscan(link_id: int):
     if not link:
         raise HTTPException(status_code=404, detail="Link not found")
     try:
-        return intel_mod.check_urlscan(link["url"])
+        return intel_mod.check_urlscan(link["url"], stored_uuid=link.get("urlscan_uuid"))
     except Exception:
         raise HTTPException(status_code=502, detail="urlscan.io lookup failed")

@@ -128,6 +128,9 @@ def init_db():
         existing_cols = {row[1] for row in db.execute("PRAGMA table_info(reports)")}
         if "case_id" not in existing_cols:
             db.execute("ALTER TABLE reports ADD COLUMN case_id TEXT")
+        link_cols = {row[1] for row in db.execute("PRAGMA table_info(links)")}
+        if "urlscan_uuid" not in link_cols:
+            db.execute("ALTER TABLE links ADD COLUMN urlscan_uuid TEXT")
         if "reporter_message" not in existing_cols:
             db.execute("ALTER TABLE reports ADD COLUMN reporter_message TEXT")
 
@@ -316,6 +319,11 @@ def get_link(link_id):
     with get_db() as db:
         row = db.execute("SELECT * FROM links WHERE id = ?", (link_id,)).fetchone()
         return dict(row) if row else None
+
+
+def store_urlscan_uuid(link_id, uuid):
+    with get_db() as db:
+        db.execute("UPDATE links SET urlscan_uuid = ? WHERE id = ?", (uuid, link_id))
 
 
 def update_report_status(report_id, status):

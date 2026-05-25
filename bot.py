@@ -7,6 +7,7 @@ from discord import app_commands
 from discord.ext import tasks
 import db
 from abuse import triage as triage_mod, dropbox as dropbox_mod
+from abuse import intel as intel_mod
 
 URL_RE = re.compile(r'https?://[^\s<>"\']+', re.IGNORECASE)
 
@@ -126,6 +127,19 @@ async def _scan_dropbox(report_id, case_id, context):
             print(f"Dropbox: {'reported' if success else 'failed'} {dropbox_url} — {notes}")
 
 
+async def _submit_urlscans(report_id):
+    """Submit each link to urlscan.io at report time so admins see the site as-submitted."""
+    if not os.getenv("URLSCAN_API_KEY", ""):
+        return
+    loop = asyncio.get_event_loop()
+    links = db.get_links_for_report(report_id)
+    for link in links:
+        uuid = await loop.run_in_executor(None, intel_mod.submit_urlscan, link["url"])
+        if uuid:
+            db.store_urlscan_uuid(link["id"], uuid)
+            print(f"urlscan.io: submitted {link['url']} → {uuid}")
+
+
 async def _notify_admins(client, report_id, case_id, reporter_name, urls, context):
     """DM every admin a new-report notification with a link to the dashboard."""
     base_url = os.getenv("WEB_BASE_URL", "http://localhost:5000").rstrip("/")
@@ -224,6 +238,7 @@ class ReportModal(discord.ui.Modal, title="Report a Scammer"):
         interaction.client.loop.create_task(
             _scan_dropbox(report_id, case_id, self.context.value.strip() or None)
         )
+        interaction.client.loop.create_task(_submit_urlscans(report_id))
 
     async def on_error(self, interaction: discord.Interaction, error: Exception):
         await interaction.response.send_message(
