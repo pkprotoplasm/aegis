@@ -234,13 +234,134 @@ function ReputationPanel({ data }) {
   )
 }
 
+// ─── urlscan.io Panel ────────────────────────────────────────────────────────
+
+function UrlscanVerdictBadge({ verdict }) {
+  if (!verdict || verdict.score == null) return null
+  const { score, malicious } = verdict
+  if (malicious) {
+    return <span className="badge bg-danger ms-2">Malicious · score {score}</span>
+  }
+  if (score > 50) {
+    return <span className="badge bg-warning text-dark ms-2">Suspicious · score {score}</span>
+  }
+  return <span className="badge bg-success ms-2">Clean · score {score}</span>
+}
+
+function UrlscanPanel({ data }) {
+  if (data.status === 'no_key') {
+    return (
+      <div className="alert alert-secondary mb-0" style={{ fontSize: '0.88rem' }}>
+        <i className="bi bi-info-circle me-2"></i>
+        No existing scan found. Set <code>URLSCAN_API_KEY</code> to auto-submit new scans.
+      </div>
+    )
+  }
+  if (data.status === 'rate_limited') {
+    return (
+      <div className="alert alert-warning mb-0">
+        <i className="bi bi-exclamation-triangle me-2"></i>
+        urlscan.io rate limit reached — try again later.
+      </div>
+    )
+  }
+  if (data.status === 'error') {
+    return (
+      <div className="alert alert-warning mb-0">
+        <i className="bi bi-exclamation-triangle me-2"></i>
+        urlscan.io lookup failed
+      </div>
+    )
+  }
+  if (data.status === 'pending') {
+    return (
+      <div>
+        <div className="alert alert-info mb-2" style={{ fontSize: '0.88rem' }}>
+          <i className="bi bi-hourglass-split me-2"></i>
+          Scan submitted — still processing. Check back shortly.
+        </div>
+        {data.report_url && (
+          <a href={data.report_url} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-info">
+            <i className="bi bi-box-arrow-up-right me-1"></i>View on urlscan.io
+          </a>
+        )}
+      </div>
+    )
+  }
+  if (data.status !== 'found') return null
+
+  const { verdict, page, screenshot_url, report_url, scanned_at } = data
+  const cats   = verdict?.categories || []
+  const brands = verdict?.brands || []
+  const tags   = verdict?.tags || []
+
+  const rows = [
+    ['Page Title', page?.title],
+    ['Final URL',  page?.url],
+    ['Domain',     page?.domain],
+    ['IP',         page?.ip],
+    ['Country',    page?.country],
+    ['Server',     page?.server],
+    ['Scanned',    scanned_at ? new Date(scanned_at).toLocaleString() : null],
+  ]
+
+  return (
+    <div>
+      <div className="d-flex align-items-center flex-wrap gap-2 mb-2">
+        <strong>urlscan.io</strong>
+        <UrlscanVerdictBadge verdict={verdict} />
+        {report_url && (
+          <a href={report_url} target="_blank" rel="noreferrer"
+             className="btn btn-sm btn-outline-secondary ms-auto">
+            <i className="bi bi-box-arrow-up-right me-1"></i>Full report
+          </a>
+        )}
+      </div>
+
+      {screenshot_url && (
+        <div className="mb-2">
+          <a href={report_url} target="_blank" rel="noreferrer">
+            <img
+              src={screenshot_url}
+              alt="Page screenshot"
+              style={{ maxWidth: '100%', borderRadius: 4, border: '1px solid #444' }}
+            />
+          </a>
+        </div>
+      )}
+
+      <table className="table table-sm table-dark mb-2">
+        <tbody>
+          {rows.map(([label, value]) =>
+            value ? (
+              <tr key={label}>
+                <td className="text-muted" style={{ width: '30%' }}>{label}</td>
+                <td className="font-monospace" style={{ fontSize: '0.82rem' }}>{value}</td>
+              </tr>
+            ) : null
+          )}
+        </tbody>
+      </table>
+
+      {(cats.length > 0 || brands.length > 0 || tags.length > 0) && (
+        <div className="d-flex flex-wrap gap-1">
+          {cats.map((c, i)   => <span key={i} className="badge bg-danger">{c}</span>)}
+          {brands.map((b, i) => <span key={i} className="badge bg-warning text-dark">{b}</span>)}
+          {tags.map((t, i)   => <span key={i} className="badge bg-secondary">{t}</span>)}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main IntelPanel Component ───────────────────────────────────────────────
 
 export default function IntelPanel({ linkId }) {
   const [panels, setPanels] = useState({
-    whois: { open: false, loading: false, data: null, error: null },
-    host: { open: false, loading: false, data: null, error: null },
+    whois:      { open: false, loading: false, data: null, error: null },
+    host:       { open: false, loading: false, data: null, error: null },
     reputation: { open: false, loading: false, data: null, error: null },
+    urlscan:    { open: false, loading: false, data: null, error: null },
   })
 
   async function toggle(type) {
@@ -263,9 +384,10 @@ export default function IntelPanel({ linkId }) {
 
     try {
       let data
-      if (type === 'whois') data = await api.getWhois(linkId)
-      else if (type === 'host') data = await api.getHost(linkId)
+      if (type === 'whois')           data = await api.getWhois(linkId)
+      else if (type === 'host')       data = await api.getHost(linkId)
       else if (type === 'reputation') data = await api.getReputation(linkId)
+      else if (type === 'urlscan')    data = await api.getUrlscan(linkId)
 
       setPanels((prev) => ({
         ...prev,
@@ -284,12 +406,13 @@ export default function IntelPanel({ linkId }) {
     if (!panel.open) return null
 
     if (panel.loading) {
+      const msg = type === 'urlscan' ? 'Scanning… (may take up to 40s)' : 'Fetching…'
       return (
         <div className="intel-panel text-center py-3">
           <div className="spinner-border spinner-border-sm text-info" role="status">
             <span className="visually-hidden">Loading…</span>
           </div>
-          <span className="text-muted ms-2">Fetching…</span>
+          <span className="text-muted ms-2">{msg}</span>
         </div>
       )
     }
@@ -309,9 +432,10 @@ export default function IntelPanel({ linkId }) {
 
     return (
       <div className="intel-panel">
-        {type === 'whois' && <WhoisPanel data={panel.data} />}
-        {type === 'host' && <HostPanel data={panel.data} />}
+        {type === 'whois'      && <WhoisPanel data={panel.data} />}
+        {type === 'host'       && <HostPanel data={panel.data} />}
         {type === 'reputation' && <ReputationPanel data={panel.data} />}
+        {type === 'urlscan'    && <UrlscanPanel data={panel.data} />}
       </div>
     )
   }
@@ -347,10 +471,19 @@ export default function IntelPanel({ linkId }) {
           <i className="bi bi-shield-exclamation me-1"></i>
           RBL Check
         </button>
+        <button
+          className={`btn btn-sm ${activeStyle('urlscan')}`}
+          onClick={() => toggle('urlscan')}
+          title="Search urlscan.io for screenshots and verdicts (may submit a new scan)"
+        >
+          <i className="bi bi-camera me-1"></i>
+          urlscan.io
+        </button>
       </div>
       {renderPanel('whois')}
       {renderPanel('host')}
       {renderPanel('reputation')}
+      {renderPanel('urlscan')}
     </div>
   )
 }

@@ -4,6 +4,7 @@ Nothing here sends reports or makes changes; it only reads.
 import base64
 import os
 import socket
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from urllib.parse import urlparse
@@ -336,6 +337,103 @@ def _check_virustotal(url, api_key):
 
 _SOURCE_ORDER = ["URLhaus", "Spamhaus DBL", "SURBL",
                  "Google Safe Browsing", "VirusTotal"]
+
+
+# ── urlscan.io ────────────────────────────────────────────────────────────────
+
+def _build_urlscan_result(data, uuid=None):
+    _uuid = uuid or data.get("_id") or (data.get("task") or {}).get("uuid", "")
+    task     = data.get("task") or {}
+    page     = data.get("page") or {}
+    overall  = (data.get("verdicts") or {}).get("overall") or {}
+    return {
+        "status":         "found",
+        "uuid":           _uuid,
+        "report_url":     f"https://urlscan.io/result/{_uuid}/" if _uuid else None,
+        "screenshot_url": data.get("screenshot") or (f"https://urlscan.io/screenshots/{_uuid}.png" if _uuid else None),
+        "scanned_at":     task.get("time"),
+        "verdict": {
+            "score":      overall.get("score"),
+            "malicious":  overall.get("malicious", False),
+            "categories": overall.get("categories") or [],
+            "brands":     overall.get("brands") or [],
+            "tags":       overall.get("tags") or [],
+        },
+        "page": {
+            "title":   page.get("title"),
+            "url":     page.get("url"),
+            "domain":  page.get("domain"),
+            "ip":      page.get("ip"),
+            "country": page.get("country"),
+            "server":  page.get("server"),
+        },
+    }
+
+
+def check_urlscan(url):
+    """
+    Search urlscan.io for an existing scan of a URL.
+    If URLSCAN_API_KEY is set and no existing scan is found, submit one and poll.
+    """
+    api_key = os.getenv("URLSCAN_API_KEY", "")
+    headers = {"User-Agent": "aegis-reporter/1.0"}
+    if api_key:
+        headers["API-Key"] = api_key
+
+    # Search for existing scans
+    try:
+        resp = requests.get(
+            "https://urlscan.io/api/v1/search/",
+            params={"q": f'page.url:"{url}"', "size": "1", "sort": "date:desc"},
+            headers=headers,
+            timeout=15,
+        )
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
+        if results:
+            return _build_urlscan_result(results[0])
+    except Exception as e:
+        print(f"intel: urlscan.io search error — {e}")
+        return {"status": "error"}
+
+    if not api_key:
+        return {"status": "no_key"}
+
+    # Submit new scan
+    try:
+        resp = requests.post(
+            "https://urlscan.io/api/v1/scan/",
+            json={"url": url, "visibility": "unlisted"},
+            headers={**headers, "Content-Type": "application/json"},
+            timeout=15,
+        )
+        if resp.status_code == 429:
+            return {"status": "rate_limited"}
+        resp.raise_for_status()
+        uuid = resp.json().get("uuid")
+        if not uuid:
+            return {"status": "error"}
+
+        # Poll up to 40 seconds for results
+        result_endpoint = f"https://urlscan.io/api/v1/result/{uuid}/"
+        for _ in range(8):
+            time.sleep(5)
+            try:
+                r = requests.get(result_endpoint, headers=headers, timeout=15)
+                if r.status_code == 200:
+                    return _build_urlscan_result(r.json(), uuid=uuid)
+            except Exception:
+                pass
+
+        return {
+            "status":         "pending",
+            "uuid":           uuid,
+            "report_url":     f"https://urlscan.io/result/{uuid}/",
+            "screenshot_url": f"https://urlscan.io/screenshots/{uuid}.png",
+        }
+    except Exception as e:
+        print(f"intel: urlscan.io submit error — {e}")
+        return {"status": "error"}
 
 
 def check_reputation(url):
