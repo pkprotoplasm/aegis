@@ -62,19 +62,19 @@ def create_app():
                 success, target, notes = whois_lookup.report_whois(url, context, case_id)
                 db.log_abuse_action(link_id, "whois_email", target,
                                     "sent" if success else "failed", notes)
-                flash(f"WHOIS: {notes}", "success" if success else "error")
+                flash(f"WHOIS: {notes}" if success else "WHOIS: action failed — see action log.", "success" if success else "error")
 
             elif action == "hosting":
                 success, target, notes, form_url = hosting.report_hosting(url, context, case_id)
                 db.log_abuse_action(link_id, "hosting", target,
                                     "sent" if success else "failed", notes)
-                flash(f"Hosting: {notes}", "success" if success else "error")
+                flash(f"Hosting: {notes}" if success else "Hosting: action failed — see action log.", "success" if success else "error")
 
             elif action == "netcraft":
                 success, notes = phishing.submit_to_netcraft(url)
                 db.log_abuse_action(link_id, "netcraft", "report.netcraft.com",
                                     "sent" if success else "failed", notes)
-                flash(f"Netcraft: {notes}", "success" if success else "error")
+                flash(f"Netcraft: {notes}" if success else "Netcraft: action failed — see action log.", "success" if success else "error")
 
             elif action == "github":
                 if gh_abuse.is_github_url(url):
@@ -126,8 +126,14 @@ def create_app():
         if not link:
             return jsonify({"error": "Link not found"}), 404
         try:
-            return jsonify(intel_mod.check_reputation(link["url"]))
+            result = intel_mod.check_reputation(link["url"])
         except Exception:
             return jsonify({"error": "Reputation check failed"}), 502
+        # Strip exception messages from error-status checks before sending to client
+        result["checks"] = [
+            {k: v for k, v in c.items() if not (k == "detail" and c.get("status") == "error")}
+            for c in result.get("checks", [])
+        ]
+        return jsonify(result)
 
     return app
