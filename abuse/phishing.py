@@ -32,9 +32,11 @@ def submit_to_netcraft(url):
         msg = data.get("message", "Submitted")
         return True, f"{msg} (ref: {uuid})" if uuid else msg
     except requests.HTTPError as e:
-        return False, f"HTTP {e.response.status_code}: {e.response.text[:200]}"
+        print(f"phishing: Netcraft HTTP error {e.response.status_code} — {e.response.text[:200]}")
+        return False, f"Netcraft rejected the submission (HTTP {e.response.status_code})"
     except Exception as e:
-        return False, str(e)
+        print(f"phishing: Netcraft submission error — {e}")
+        return False, "Submission failed"
 
 
 def get_google_safebrowsing_url(url):

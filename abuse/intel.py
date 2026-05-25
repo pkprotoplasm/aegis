@@ -136,7 +136,8 @@ def get_whois(domain):
                     break
             result["domain_age_days"] = _domain_age_days(result["created"])
         except Exception as e:
-            result["error"] = str(e)
+            print(f"intel: WHOIS lookup error for {domain} — {e}")
+            result["error"] = "WHOIS lookup failed"
 
     # ── DNS records ──
     if _DNS_AVAILABLE:
@@ -218,7 +219,8 @@ def get_host_info(domain):
                 result["provider_name"] = "GitHub Pages"
                 result["abuse_email"]   = "abuse@github.com"
         except Exception as e:
-            result["rdap_error"] = str(e)
+            print(f"intel: RDAP lookup error for {domain} — {e}")
+            result["rdap_error"] = "RDAP lookup failed"
     else:
         result["rdap_error"] = "ipwhois not installed"
 
@@ -248,7 +250,8 @@ def _check_urlhaus(url):
             "reference":  data.get("urlhaus_reference"),
         }
     except Exception as e:
-        return {"source": "URLhaus", "status": "error", "detail": str(e)}
+        print(f"intel: URLhaus check error — {e}")
+        return {"source": "URLhaus", "status": "error"}
 
 
 def _check_dnsrbl(domain, rbl_host, source_name, return_codes):
@@ -264,7 +267,8 @@ def _check_dnsrbl(domain, rbl_host, source_name, return_codes):
     except _dns.NXDOMAIN:
         return {"source": source_name, "status": "not_listed"}
     except Exception as e:
-        return {"source": source_name, "status": "error", "detail": str(e)}
+        print(f"intel: DNS RBL check error for {source_name} — {e}")
+        return {"source": source_name, "status": "error"}
 
 
 def _check_gsb(url, api_key):
@@ -294,7 +298,8 @@ def _check_gsb(url, api_key):
                     "threat_types": threats}
         return {"source": "Google Safe Browsing", "status": "not_listed"}
     except Exception as e:
-        return {"source": "Google Safe Browsing", "status": "error", "detail": str(e)}
+        print(f"intel: Google Safe Browsing check error — {e}")
+        return {"source": "Google Safe Browsing", "status": "error"}
 
 
 def _check_virustotal(url, api_key):
@@ -325,7 +330,8 @@ def _check_virustotal(url, api_key):
             "vt_link":      f"https://www.virustotal.com/gui/url/{url_id_link}",
         }
     except Exception as e:
-        return {"source": "VirusTotal", "status": "error", "detail": str(e)}
+        print(f"intel: VirusTotal check error — {e}")
+        return {"source": "VirusTotal", "status": "error"}
 
 
 _SOURCE_ORDER = ["URLhaus", "Spamhaus DBL", "SURBL",
@@ -362,7 +368,8 @@ def check_reputation(url):
             try:
                 checks.append(future.result())
             except Exception as e:
-                checks.append({"source": "unknown", "status": "error", "detail": str(e)})
+                print(f"intel: reputation check thread error — {e}")
+                checks.append({"source": "unknown", "status": "error"})
 
     if not gsb_key:
         checks.append({"source": "Google Safe Browsing", "status": "not_configured"})
