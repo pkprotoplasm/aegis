@@ -14,7 +14,7 @@ export default function LoginPage({ dryRun }) {
   return (
     <div className="d-flex flex-column min-vh-100">
       {dryRun && <DryRunBanner />}
-      <div className="d-flex flex-grow-1 align-items-center justify-content-center">
+      <div className="d-flex flex-grow-1 align-items-center justify-content-center flex-column gap-3">
         <div className="card border-secondary" style={{ width: '100%', maxWidth: 420 }}>
           <div className="card-body text-center p-5">
             <div className="mb-3">
@@ -36,6 +36,7 @@ export default function LoginPage({ dryRun }) {
             </a>
           </div>
         </div>
+        <a href="/privacy" className="text-muted small">Privacy Policy</a>
       </div>
     </div>
   )

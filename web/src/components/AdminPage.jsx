@@ -1,6 +1,57 @@
 import React, { useState, useEffect } from 'react'
+import MDEditor from '@uiw/react-md-editor'
+import '@uiw/react-md-editor/markdown-editor.css'
+import '@uiw/react-markdown-preview/markdown.css'
 import { api } from '../api.js'
 import { formatDate } from '../utils.js'
+
+function PrivacyEditor({ showFlash }) {
+  const [content, setContent]   = useState('')
+  const [loading, setLoading]   = useState(true)
+  const [saving, setSaving]     = useState(false)
+
+  useEffect(() => {
+    api.getPrivacyPolicy()
+      .then((data) => setContent(data.content))
+      .catch((err) => showFlash('error', `Failed to load privacy policy: ${err.message}`))
+      .finally(() => setLoading(false))
+  }, [])
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      await api.setPrivacyPolicy(content)
+      showFlash('success', 'Privacy policy saved.')
+    } catch (err) {
+      showFlash('error', `Failed to save: ${err.message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="text-center py-4">
+        <div className="spinner-border spinner-border-sm text-secondary"></div>
+      </div>
+    )
+  }
+
+  return (
+    <div data-color-mode="dark">
+      <MDEditor value={content} onChange={setContent} height={400} />
+      <div className="d-flex align-items-center gap-3 mt-3">
+        <button className="btn btn-sm btn-primary" onClick={handleSave} disabled={saving}>
+          {saving ? <span className="spinner-border spinner-border-sm me-1" /> : null}
+          Save
+        </button>
+        <a href="/privacy" target="_blank" rel="noreferrer" className="text-muted small">
+          <i className="bi bi-box-arrow-up-right me-1"></i>Preview public page
+        </a>
+      </div>
+    </div>
+  )
+}
 
 function RoleBadge({ role }) {
   return role === 'super_admin'
@@ -64,7 +115,7 @@ export default function AdminPage({ currentUser }) {
   }
 
   return (
-    <div style={{ maxWidth: 640 }}>
+    <div style={{ maxWidth: 900 }}>
       <h4 className="mb-4">Admin Management</h4>
 
       {flash && (
@@ -125,6 +176,23 @@ export default function AdminPage({ currentUser }) {
               </tbody>
             </table>
           )}
+        </div>
+      </div>
+
+      {/* Privacy policy editor */}
+      <div className="card border-secondary mb-4">
+        <div className="card-header text-muted small text-uppercase fw-semibold" style={{ letterSpacing: '0.05em' }}>
+          Privacy Policy
+        </div>
+        <div className="card-body">
+          <p className="text-muted small mb-3">
+            This content is shown at{' '}
+            <a href="/privacy" target="_blank" rel="noreferrer" className="text-muted">
+              /privacy
+            </a>
+            {' '}and is publicly accessible without login. Use Markdown to format the document.
+          </p>
+          <PrivacyEditor showFlash={showFlash} />
         </div>
       </div>
 

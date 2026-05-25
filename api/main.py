@@ -8,7 +8,7 @@ db.init_db()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.routers import reports, links, auth, admins
+from api.routers import reports, links, auth, admins, privacy
 
 app = FastAPI(title="Aegis API", docs_url="/api/docs", openapi_url="/api/openapi.json")
 
@@ -21,6 +21,7 @@ app.add_middleware(
 
 # Public endpoints (no auth required)
 app.include_router(auth.router,    prefix="/api")
+app.include_router(privacy.router, prefix="/api")
 
 # Protected endpoints
 app.include_router(reports.router, prefix="/api")

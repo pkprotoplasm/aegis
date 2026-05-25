@@ -23,6 +23,7 @@ A Discord bot that lets server members report phishing links sent by suspected s
 - **IMAP monitor** — polls your abuse inbox for provider replies, stores them against the case, and DMs the original reporter
 - **Internal case notes** — admins can attach timestamped notes to any case (not visible to reporters)
 - **Reporter messages** — admins can set a custom message on a case that is shown to the reporter in `/status` replies and status-change notifications, without exposing the admin's identity
+- **Privacy policy page** — super admin can author the policy in Markdown via the dashboard; the rendered page at `/privacy` is publicly accessible without login
 - **Dry-run mode** — set `DRY_RUN=1` to log all outbound actions without sending anything; a banner appears in the dashboard
 
 ---
@@ -215,6 +216,8 @@ All actions are logged per link with timestamps and outcome (`sent` / `failed` /
 
 **Reporter message** — a single message field on each case. When set, it appears as "Message from our team" in the reporter's `/status` embed and is included in status-change DMs. The admin's identity is never shown to the reporter. Clearing the field removes it from future notifications.
 
+**Privacy policy** — found at `/privacy` (no login required). Super admins can write and update it via the Admins page using a split-pane Markdown editor.
+
 ---
 
 ## GitHub Pages detection
@@ -314,7 +317,8 @@ aegis/
 │       ├── auth.py          # Discord OAuth2 flow (/api/auth/login, /callback, /logout, /me)
 │       ├── admins.py        # /api/admins endpoints (super admin only)
 │       ├── reports.py       # /api/reports endpoints
-│       └── links.py         # /api/links endpoints (actions + intel)
+│       ├── links.py         # /api/links endpoints (actions + intel)
+│       └── privacy.py       # /api/privacy endpoints (GET public, PUT super admin only)
 └── web/
     ├── Dockerfile           # Multi-stage: Vite build → nginx
     ├── nginx.conf           # Proxies /api → api:8000, serves React SPA
@@ -323,10 +327,12 @@ aegis/
     └── src/
         ├── App.jsx
         ├── api.js           # Fetch wrappers for all API endpoints
+        ├── utils.js         # Shared date/time formatting helpers
         └── components/
             ├── Navbar.jsx
             ├── LoginPage.jsx
             ├── AdminPage.jsx
+            ├── PrivacyPage.jsx  # Public /privacy route (no login required)
             ├── DryRunBanner.jsx
             ├── ReportList.jsx
             ├── ReportDetail.jsx

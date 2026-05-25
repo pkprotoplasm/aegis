@@ -46,4 +46,7 @@ export const api = {
 
   setReporterMessage: (reportId, message) =>
     request('PUT', `/reports/${reportId}/reporter-message`, { message }),
+
+  getPrivacyPolicy: () => request('GET', '/privacy'),
+  setPrivacyPolicy: (content) => request('PUT', '/privacy', { content }),
 }

@@ -67,6 +67,11 @@ export default function Navbar({ user }) {
                 </span>
               </li>
               <li className="nav-item">
+                <a className="nav-link text-secondary" href="/privacy" target="_blank" rel="noreferrer" style={{ fontSize: '0.875rem' }}>
+                  Privacy
+                </a>
+              </li>
+              <li className="nav-item">
                 <a className="nav-link text-secondary" href="/api/auth/logout">
                   <i className="bi bi-box-arrow-right me-1"></i>
                   Logout

@@ -118,6 +118,11 @@ def init_db():
                 note TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS site_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
         """)
         # Migrations for columns added after initial schema
         existing_cols = {row[1] for row in db.execute("PRAGMA table_info(reports)")}
@@ -416,6 +421,22 @@ def remove_admin(discord_id):
         db.execute(
             "DELETE FROM admins WHERE discord_id = ? AND role != 'super_admin'",
             (discord_id,),
+        )
+
+
+def get_setting(key, default=None):
+    with get_db() as db:
+        row = db.execute("SELECT value FROM site_settings WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else default
+
+
+def set_setting(key, value):
+    now = datetime.now(timezone.utc).isoformat()
+    with get_db() as db:
+        db.execute(
+            """INSERT INTO site_settings (key, value, updated_at) VALUES (?, ?, ?)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at""",
+            (key, value, now),
         )
 
 

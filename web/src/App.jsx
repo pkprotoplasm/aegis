@@ -1,16 +1,22 @@
 import React, { useState, useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Navbar from './components/Navbar.jsx'
 import DryRunBanner from './components/DryRunBanner.jsx'
 import LoginPage from './components/LoginPage.jsx'
 import ReportList from './components/ReportList.jsx'
 import ReportDetail from './components/ReportDetail.jsx'
 import AdminPage from './components/AdminPage.jsx'
+import PrivacyPage from './components/PrivacyPage.jsx'
 import { api } from './api.js'
 
 export default function App() {
+  const location = useLocation()
   const [user, setUser]     = useState(undefined) // undefined = loading
   const [dryRun, setDryRun] = useState(false)
+
+  if (location.pathname === '/privacy') {
+    return <PrivacyPage />
+  }
 
   useEffect(() => {
     api.getConfig()
