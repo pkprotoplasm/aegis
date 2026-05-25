@@ -127,17 +127,97 @@ async def _scan_dropbox(report_id, case_id, context):
             print(f"Dropbox: {'reported' if success else 'failed'} {dropbox_url} — {notes}")
 
 
-async def _submit_urlscans(report_id):
-    """Submit each link to urlscan.io at report time so admins see the site as-submitted."""
-    if not os.getenv("URLSCAN_API_KEY", ""):
-        return
+async def _scan_and_warn(client, reporter_id, report_id, case_id, urls):
+    """
+    Run all automated on-submit threat checks in sequence:
+      1. File-sharing link scan (page body)
+      2. Google Safe Browsing lookup (if key configured)
+      3. urlscan.io submission + verdict poll (if key configured; UUID stored for admin panel)
+
+    If any check finds a threat, a single consolidated case note is added, the reporter
+    message is set (unless an admin has already written one), and the reporter is DMed.
+    """
     loop = asyncio.get_event_loop()
+    gsb_key = os.getenv("GOOGLE_SAFE_BROWSING_API_KEY", "")
+
+    # threat_rows: list of (url, source_label, detail) for the case note
+    threat_rows: list[tuple[str, str, str]] = []
+    sources: set[str] = set()
+
+    # ── 1. File-sharing link scan ─────────────────────────────────────────
+    for url in urls:
+        hits = await loop.run_in_executor(None, dropbox_mod.scan_for_fileshare_links, url)
+        if hits:
+            sites = ", ".join(sorted({h["site"] for h in hits}))
+            threat_rows.append((url, "File-sharing links", sites))
+            sources.add("file-sharing services")
+            print(f"bot: fileshare links in {url} ({sites})")
+
+    # ── 2. Google Safe Browsing ───────────────────────────────────────────
+    if gsb_key:
+        for url in urls:
+            result = await loop.run_in_executor(
+                None, intel_mod._check_gsb, url, gsb_key
+            )
+            if result.get("status") == "listed":
+                detail = ", ".join(result.get("threat_types") or [])
+                threat_rows.append((url, "Google Safe Browsing", detail))
+                sources.add("Google Safe Browsing")
+                print(f"bot: GSB flagged {url} ({detail})")
+
+    # ── 3. urlscan.io — submit, store UUID, poll for verdict ─────────────
     links = db.get_links_for_report(report_id)
     for link in links:
         uuid = await loop.run_in_executor(None, intel_mod.submit_urlscan, link["url"])
-        if uuid:
-            db.store_urlscan_uuid(link["id"], uuid)
-            print(f"urlscan.io: submitted {link['url']} → {uuid}")
+        if not uuid:
+            continue
+        db.store_urlscan_uuid(link["id"], uuid)
+        print(f"urlscan.io: submitted {link['url']} → {uuid}")
+        result = await loop.run_in_executor(None, intel_mod.fetch_urlscan_result, uuid)
+        if result and (result.get("verdict") or {}).get("malicious"):
+            verdict = result["verdict"]
+            score = verdict.get("score", "?")
+            cats  = verdict.get("categories") or []
+            detail = f"malicious, score {score}" + (f" ({', '.join(cats)})" if cats else "")
+            threat_rows.append((link["url"], "urlscan.io", detail))
+            sources.add("urlscan.io")
+            print(f"bot: urlscan.io verdict malicious for {link['url']} (score {score})")
+
+    if not threat_rows:
+        return
+
+    # ── Case note (admin-facing) ──────────────────────────────────────────
+    note_lines = ["Automated threat scan findings at submission time:"]
+    for url, source, detail in threat_rows:
+        note_lines.append(f"  • [{source}] {url}\n    {detail}")
+    db.add_case_note(report_id, "system", "Aegis", "\n".join(note_lines))
+
+    # ── Reporter message (shown via /status) ──────────────────────────────
+    report = db.get_report(report_id)
+    if not (report or {}).get("reporter_message"):
+        source_str = " and ".join(sorted(sources))
+        db.set_reporter_message(
+            report_id,
+            f"One or more of the URLs you reported have been flagged by automated "
+            f"threat checks ({source_str}). Do not click any links or open any files "
+            f"or downloads from the URLs you reported until you receive confirmation "
+            f"from Aegis following our review.",
+        )
+
+    # ── DM the reporter ───────────────────────────────────────────────────
+    source_str = " and ".join(sorted(sources))
+    try:
+        user = await client.fetch_user(int(reporter_id))
+        await user.send(
+            f"**Safety notice — Case `{case_id}`**\n\n"
+            f"One or more of the URLs you reported have been flagged by automated "
+            f"threat checks ({source_str}). These may be dangerous.\n\n"
+            f"**Do not click any links or open any files or downloads** from the URLs "
+            f"you reported until you receive a follow-up from Aegis following our review.\n\n"
+            f"*Aegis — Automated Effective Guard against Information Stealers*"
+        )
+    except Exception as e:
+        print(f"bot: could not DM reporter {reporter_id} threat warning — {e}")
 
 
 async def _notify_admins(client, report_id, case_id, reporter_name, urls, context):
@@ -238,7 +318,11 @@ class ReportModal(discord.ui.Modal, title="Report a Scammer"):
         interaction.client.loop.create_task(
             _scan_dropbox(report_id, case_id, self.context.value.strip() or None)
         )
-        interaction.client.loop.create_task(_submit_urlscans(report_id))
+        interaction.client.loop.create_task(
+            _scan_and_warn(
+                self._client, str(interaction.user.id), report_id, case_id, urls
+            )
+        )
 
     async def on_error(self, interaction: discord.Interaction, error: Exception):
         await interaction.response.send_message(

@@ -370,6 +370,28 @@ def _build_urlscan_result(data, uuid=None):
     }
 
 
+def fetch_urlscan_result(uuid, max_polls=8, poll_interval=5):
+    """
+    Poll urlscan.io until a scan result is available, then return the parsed dict.
+    Returns None if the scan is still pending after max_polls attempts.
+    Requires URLSCAN_API_KEY to read unlisted scans.
+    """
+    api_key = os.getenv("URLSCAN_API_KEY", "")
+    auth_headers = {"User-Agent": "aegis-reporter/1.0"}
+    if api_key:
+        auth_headers["API-Key"] = api_key
+    endpoint = f"https://urlscan.io/api/v1/result/{uuid}/"
+    for _ in range(max_polls):
+        time.sleep(poll_interval)
+        try:
+            resp = requests.get(endpoint, headers=auth_headers, timeout=15)
+            if resp.status_code == 200:
+                return _build_urlscan_result(resp.json(), uuid=uuid)
+        except Exception:
+            pass
+    return None
+
+
 def submit_urlscan(url):
     """
     Submit a URL to urlscan.io for scanning and return the UUID immediately.
@@ -468,17 +490,9 @@ def check_urlscan(url, stored_uuid=None):
         if not uuid:
             return {"status": "error"}
 
-        # Poll up to 40 seconds — unlisted scans need auth_headers here too
-        result_endpoint = f"https://urlscan.io/api/v1/result/{uuid}/"
-        for _ in range(8):
-            time.sleep(5)
-            try:
-                r = requests.get(result_endpoint, headers=auth_headers, timeout=15)
-                if r.status_code == 200:
-                    return _build_urlscan_result(r.json(), uuid=uuid)
-            except Exception:
-                pass
-
+        result = fetch_urlscan_result(uuid)
+        if result:
+            return result
         return {
             "status":         "pending",
             "uuid":           uuid,
