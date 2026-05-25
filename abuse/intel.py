@@ -4,6 +4,7 @@ Nothing here sends reports or makes changes; it only reads.
 import base64
 import os
 import socket
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -335,7 +336,80 @@ def _check_virustotal(url, api_key):
         return {"source": "VirusTotal", "status": "error"}
 
 
-_SOURCE_ORDER = ["URLhaus", "Spamhaus DBL", "SURBL",
+# ── OpenPhish feed ────────────────────────────────────────────────────────────
+
+_OPENPHISH_FEED_URL  = "https://openphish.com/feed.txt"
+_OPENPHISH_TTL_HOURS = 6
+
+_openphish_lock       = threading.Lock()
+_openphish_urls:      set[str] = set()
+_openphish_hostnames: set[str] = set()
+_openphish_fetched_at: datetime | None = None
+
+
+def refresh_openphish_feed():
+    """
+    Fetch the OpenPhish phishing URL feed and update the in-memory cache.
+    Returns the number of entries loaded, or 0 on failure.
+    Safe to call from multiple threads; only one fetch runs at a time.
+    """
+    global _openphish_urls, _openphish_hostnames, _openphish_fetched_at
+    try:
+        resp = requests.get(
+            _OPENPHISH_FEED_URL,
+            headers={"User-Agent": "aegis-reporter/1.0"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        urls = {line.strip() for line in resp.text.splitlines()
+                if line.strip().startswith("http")}
+        hostnames = {urlparse(u).hostname for u in urls if urlparse(u).hostname}
+        with _openphish_lock:
+            _openphish_urls      = urls
+            _openphish_hostnames = hostnames
+            _openphish_fetched_at = datetime.utcnow()
+        print(f"intel: OpenPhish feed refreshed — {len(urls)} entries")
+        return len(urls)
+    except Exception as e:
+        print(f"intel: OpenPhish feed refresh failed — {e}")
+        return 0
+
+
+def _openphish_cache():
+    """Return (urls, hostnames) from cache, lazily refreshing if stale or unloaded."""
+    with _openphish_lock:
+        fetched   = _openphish_fetched_at
+        urls      = _openphish_urls
+        hostnames = _openphish_hostnames
+    stale = fetched is None or (
+        (datetime.utcnow() - fetched).total_seconds() / 3600 >= _OPENPHISH_TTL_HOURS
+    )
+    if stale:
+        refresh_openphish_feed()
+        with _openphish_lock:
+            urls      = _openphish_urls
+            hostnames = _openphish_hostnames
+    return urls, hostnames
+
+
+def _check_openphish(url):
+    """Check a URL against the cached OpenPhish phishing feed."""
+    try:
+        urls, hostnames = _openphish_cache()
+        if not urls:
+            return {"source": "OpenPhish", "status": "error"}
+        if url in urls:
+            return {"source": "OpenPhish", "status": "listed", "threat": "phishing"}
+        hostname = urlparse(url).hostname or ""
+        if hostname and hostname in hostnames:
+            return {"source": "OpenPhish", "status": "listed", "threat": "phishing"}
+        return {"source": "OpenPhish", "status": "not_listed"}
+    except Exception as e:
+        print(f"intel: OpenPhish check error — {e}")
+        return {"source": "OpenPhish", "status": "error"}
+
+
+_SOURCE_ORDER = ["URLhaus", "OpenPhish", "Spamhaus DBL", "SURBL",
                  "Google Safe Browsing", "VirusTotal"]
 
 
@@ -519,6 +593,7 @@ def check_reputation(url):
 
     tasks = [
         lambda: _check_urlhaus(url),
+        lambda: _check_openphish(url),
         lambda: _check_dnsrbl(rbl_domain, "dbl.spamhaus.org", "Spamhaus DBL", _SPAMHAUS_DBL),
         lambda: _check_dnsrbl(rbl_domain, "multi.surbl.org",  "SURBL",        _SURBL_MULTI),
     ]
@@ -528,7 +603,7 @@ def check_reputation(url):
         tasks.append(lambda: _check_virustotal(url, vt_key))
 
     checks = []
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    with ThreadPoolExecutor(max_workers=7) as pool:
         futures = {pool.submit(fn): fn for fn in tasks}
         for future in as_completed(futures, timeout=20):
             try:

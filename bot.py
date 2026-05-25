@@ -153,7 +153,15 @@ async def _scan_and_warn(client, reporter_id, report_id, case_id, urls):
             sources.add("file-sharing services")
             print(f"bot: fileshare links in {url} ({sites})")
 
-    # ── 2. Google Safe Browsing ───────────────────────────────────────────
+    # ── 2. OpenPhish ─────────────────────────────────────────────────────
+    for url in urls:
+        result = await loop.run_in_executor(None, intel_mod._check_openphish, url)
+        if result.get("status") == "listed":
+            threat_rows.append((url, "OpenPhish", "listed in OpenPhish phishing feed"))
+            sources.add("OpenPhish")
+            print(f"bot: OpenPhish flagged {url}")
+
+    # ── 4. Google Safe Browsing ───────────────────────────────────────────
     if gsb_key:
         for url in urls:
             result = await loop.run_in_executor(
@@ -165,7 +173,7 @@ async def _scan_and_warn(client, reporter_id, report_id, case_id, urls):
                 sources.add("Google Safe Browsing")
                 print(f"bot: GSB flagged {url} ({detail})")
 
-    # ── 3. urlscan.io — submit, store UUID, poll for verdict ─────────────
+    # ── 5. urlscan.io — submit, store UUID, poll for verdict ─────────────
     links = db.get_links_for_report(report_id)
     for link in links:
         uuid = await loop.run_in_executor(None, intel_mod.submit_urlscan, link["url"])
@@ -347,10 +355,16 @@ def create_bot():
             except Exception as e:
                 print(f"bot: notification failed for user {notif['discord_user_id']} — {e}")
 
+    @tasks.loop(hours=6)
+    async def refresh_openphish():
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, intel_mod.refresh_openphish_feed)
+
     @client.event
     async def on_ready():
         await tree.sync()
         drain_notifications.start()
+        refresh_openphish.start()
         print(f"Logged in as {client.user} — slash commands synced")
 
     @tree.command(name="report",
