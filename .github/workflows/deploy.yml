@@ -1,0 +1,85 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  REPO: ${{ github.repository_owner }}
+
+jobs:
+  build:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push bot
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.bot
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/aegis-bot:latest
+          cache-from: type=gha,scope=bot
+          cache-to: type=gha,mode=max,scope=bot
+
+      - name: Build and push api
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.api
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/aegis-api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build and push web
+        uses: docker/build-push-action@v5
+        with:
+          context: ./web
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/aegis-web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production
+
+    steps:
+      - name: SSH and deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ secrets.DEPLOY_USER }} --password-stdin
+            BOT_IMAGE=ghcr.io/${{ github.repository_owner }}/aegis-bot:latest \
+            API_IMAGE=ghcr.io/${{ github.repository_owner }}/aegis-api:latest \
+            WEB_IMAGE=ghcr.io/${{ github.repository_owner }}/aegis-web:latest \
+            docker compose pull
+            BOT_IMAGE=ghcr.io/${{ github.repository_owner }}/aegis-bot:latest \
+            API_IMAGE=ghcr.io/${{ github.repository_owner }}/aegis-api:latest \
+            WEB_IMAGE=ghcr.io/${{ github.repository_owner }}/aegis-web:latest \
+            docker compose up -d --remove-orphans

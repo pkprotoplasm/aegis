@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+{% block title %}Report #{{ report.id }} — Aegis{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+  <a href="/" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i> Back
+  </a>
+  <h4 class="mb-0">Report #{{ report.id }}</h4>
+  {% if report.case_id %}
+  <code class="fs-6 text-warning">{{ report.case_id }}</code>
+  {% endif %}
+  {% set colors = {"pending": "warning", "reviewed": "info", "actioned": "success", "dismissed": "secondary"} %}
+  <span class="badge bg-{{ colors.get(report.status, 'secondary') }}">{{ report.status }}</span>
+  {% if report.provider_responses %}
+  <span class="badge bg-success">
+    <i class="bi bi-envelope-check"></i> {{ report.provider_responses|length }} provider response(s)
+  </span>
+  {% endif %}
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-md-6">
+    <div class="card bg-dark border-secondary">
+      <div class="card-body">
+        <h6 class="card-title text-muted">Reporter</h6>
+        <p class="mb-1"><strong>{{ report.reporter_name }}</strong></p>
+        <p class="mb-0 text-muted small">ID: {{ report.reporter_id }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card bg-dark border-secondary">
+      <div class="card-body">
+        <h6 class="card-title text-muted">Suspected Scammer</h6>
+        {% if report.scammer_name %}
+          <p class="mb-0"><strong>{{ report.scammer_name }}</strong></p>
+        {% else %}
+          <p class="mb-0 text-muted">Not specified</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card bg-dark border-secondary">
+      <div class="card-body">
+        <h6 class="card-title text-muted">Server</h6>
+        <p class="mb-1">{{ report.guild_name or "Direct Message" }}</p>
+        <p class="mb-0 text-muted small">Reported {{ report.reported_at[:19] }} UTC</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card bg-dark border-secondary">
+      <div class="card-body">
+        <h6 class="card-title text-muted">Context</h6>
+        <p class="mb-0">{{ report.context or "No context provided." }}</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Status update -->
+<div class="card bg-dark border-secondary mb-4">
+  <div class="card-body d-flex align-items-center gap-3 flex-wrap">
+    <span class="fw-bold">Update status:</span>
+    <form method="post" action="/report/{{ report.id }}/status" class="d-flex gap-2 flex-wrap">
+      {% for s in ["pending", "reviewed", "actioned", "dismissed"] %}
+      <button name="status" value="{{ s }}"
+              class="btn btn-sm btn-{{ 'outline-warning' if s == 'pending' else 'outline-info' if s == 'reviewed' else 'outline-success' if s == 'actioned' else 'outline-secondary' }}
+                     {{ 'active' if report.status == s else '' }}">
+        {{ s.capitalize() }}
+      </button>
+      {% endfor %}
+    </form>
+  </div>
+</div>
+
+<!-- Links and actions -->
+<h5 class="mb-3">Reported Links <span class="badge bg-secondary">{{ report.links|length }}</span></h5>
+
+{% for link in report.links %}
+<div class="card bg-dark border-{{ 'danger' if link.is_github_pages else 'secondary' }} mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span class="url-cell text-info">{{ link.url }}</span>
+    <div class="d-flex align-items-center gap-2">
+      {% if link.is_github_pages %}
+      <span class="badge bg-danger">
+        <i class="bi bi-github"></i>
+        GitHub Pages{% if link.github_pages_user %} — {{ link.github_pages_user }}{% endif %}
+      </span>
+      {% endif %}
+      <span class="text-muted small">{{ link.domain }}</span>
+    </div>
+  </div>
+  <div class="card-body">
+
+    <!-- Intelligence lookups -->
+    <div class="intel-panel mb-3" data-link-id="{{ link.id }}">
+      <p class="text-muted small mb-2 fw-semibold text-uppercase" style="letter-spacing:.05em;font-size:.7rem">Intelligence</p>
+      <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-sm btn-outline-info"
+                onclick="toggleIntel({{ link.id }}, 'whois', this)">
+          <i class="bi bi-card-text"></i> WHOIS
+        </button>
+        <button class="btn btn-sm btn-outline-info"
+                onclick="toggleIntel({{ link.id }}, 'host', this)">
+          <i class="bi bi-hdd-network"></i> Host Info
+        </button>
+        <button class="btn btn-sm btn-outline-info"
+                onclick="toggleIntel({{ link.id }}, 'reputation', this)">
+          <i class="bi bi-shield-check"></i> RBL Check
+        </button>
+      </div>
+    </div>
+
+    <hr class="border-secondary my-3">
+
+    {% if link.is_github_pages %}
+    <div class="alert alert-danger py-2 mb-3 small">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <strong>GitHub Pages phishing site detected.</strong>
+      {% if link.github_pages_user %}
+        Custom domain CNAMEs to <code>{{ link.github_pages_user }}.github.io</code>.
+      {% else %}
+        Resolves to GitHub Pages IP range (185.199.108.0/22).
+      {% endif %}
+      "Email Host" will send directly to <strong>abuse@github.com</strong>.
+    </div>
+    {% endif %}
+
+    <!-- Action buttons -->
+    <div class="d-flex flex-wrap gap-2 mb-3">
+
+      <!-- WHOIS / Registrar email -->
+      <form method="post" action="/link/{{ link.id }}/action">
+        <input type="hidden" name="action" value="whois">
+        <button type="submit" class="btn btn-sm btn-outline-warning"
+                onclick="this.disabled=true; this.form.submit();">
+          <i class="bi bi-envelope"></i> Email Registrar
+        </button>
+      </form>
+
+      <!-- Hosting abuse — label changes when GitHub Pages detected -->
+      <form method="post" action="/link/{{ link.id }}/action">
+        <input type="hidden" name="action" value="hosting">
+        <button type="submit"
+                class="btn btn-sm {{ 'btn-danger' if link.is_github_pages else 'btn-outline-warning' }}"
+                onclick="this.disabled=true; this.form.submit();">
+          <i class="bi bi-{{ 'github' if link.is_github_pages else 'server' }}"></i>
+          {{ 'Email abuse@github.com' if link.is_github_pages else 'Email Host' }}
+        </button>
+      </form>
+
+      <!-- Netcraft -->
+      <form method="post" action="/link/{{ link.id }}/action">
+        <input type="hidden" name="action" value="netcraft">
+        <button type="submit" class="btn btn-sm btn-outline-danger"
+                onclick="this.disabled=true; this.form.submit();">
+          <i class="bi bi-bug"></i> Submit to Netcraft
+        </button>
+      </form>
+
+      <!-- Google Safe Browsing (opens new tab) -->
+      <form method="post" action="/link/{{ link.id }}/action" target="_blank">
+        <input type="hidden" name="action" value="safebrowsing">
+        <button type="submit" class="btn btn-sm btn-outline-danger">
+          <i class="bi bi-shield-exclamation"></i> Report to Google
+        </button>
+      </form>
+
+      <!-- GitHub form (for direct github.com links; GitHub Pages sites use "Email Host" above) -->
+      {% if "github.com" in link.url or ("github.io" in link.url and not link.is_github_pages) %}
+      <form method="post" action="/link/{{ link.id }}/action" target="_blank">
+        <input type="hidden" name="action" value="github">
+        <button type="submit" class="btn btn-sm btn-outline-light">
+          <i class="bi bi-github"></i> Report to GitHub
+        </button>
+      </form>
+      {% endif %}
+
+    </div>
+
+    <!-- Action history -->
+    {% if link.actions %}
+    <div class="mt-2">
+      <p class="text-muted small mb-1">Actions taken:</p>
+      <ul class="list-unstyled mb-0 action-log">
+        {% for a in link.actions %}
+        <li>
+          <i class="bi bi-{{ 'check-circle text-success' if a.status == 'sent' else 'x-circle text-danger' if a.status == 'failed' else 'clock text-warning' }}"></i>
+          <strong>{{ a.action_type }}</strong> →
+          {{ a.target or "—" }}
+          {% if a.sent_at %}<span class="text-muted">@ {{ a.sent_at[:16] }}</span>{% endif %}
+          {% if a.notes %}<br><span class="ps-3 text-muted">{{ a.notes }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% else %}
+    <p class="text-muted small mb-0">No actions taken yet.</p>
+    {% endif %}
+
+  </div>
+</div>
+{% endfor %}
+
+<!-- Provider responses -->
+<h5 class="mb-3 mt-4">
+  Provider Responses
+  <span class="badge bg-secondary">{{ report.provider_responses|length }}</span>
+</h5>
+
+{% if report.provider_responses %}
+{% for resp in report.provider_responses %}
+<div class="card bg-dark border-success mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span>
+      <i class="bi bi-envelope-open text-success"></i>
+      <strong>{{ resp.from_addr }}</strong>
+    </span>
+    <span class="text-muted small">{{ resp.received_at[:16] }} UTC</span>
+  </div>
+  <div class="card-body">
+    <p class="mb-2"><strong>Subject:</strong> {{ resp.subject }}</p>
+    <pre class="bg-black rounded p-3 small text-light" style="white-space:pre-wrap;max-height:300px;overflow-y:auto">{{ resp.body }}</pre>
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="text-center text-muted py-4">
+  <i class="bi bi-hourglass-split fs-2"></i>
+  <p class="mt-2 small">No provider responses yet — the IMAP monitor checks for replies periodically.</p>
+</div>
+{% endif %}
+
+<script>
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toggleIntel(linkId, type, btn) {
+  const containerId = `intel-${linkId}-${type}`;
+  const existing = document.getElementById(containerId);
+  if (existing) { existing.classList.toggle('d-none'); return; }
+
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width:.75rem;height:.75rem"></span>Loading…';
+
+  fetch(`/link/${linkId}/intel/${type}`)
+    .then(r => r.json())
+    .then(data => {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+      const div = document.createElement('div');
+      div.id = containerId;
+      div.innerHTML = type === 'whois' ? renderWhois(data) : type === 'host' ? renderHost(data) : renderReputation(data);
+      btn.closest('.intel-panel').appendChild(div);
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.innerHTML = orig;
+      const div = document.createElement('div');
+      div.id = containerId;
+      div.innerHTML = `<div class="alert alert-danger small py-1 mt-2">Error: ${esc(err.message)}</div>`;
+      btn.closest('.intel-panel').appendChild(div);
+    });
+}
+
+function intelTable(rows) {
+  const body = rows
+    .filter(([,v]) => v != null && v !== '' && !(Array.isArray(v) && !v.length))
+    .map(([label, value]) => {
+      const display = Array.isArray(value) ? value.map(esc).join(', ') : esc(String(value));
+      return `<tr>
+        <td class="text-muted ps-3 pe-3 align-top" style="width:140px;white-space:nowrap">${esc(label)}</td>
+        <td>${display}</td></tr>`;
+    }).join('');
+  return `<table class="table table-dark table-sm mb-0"><tbody>${body}</tbody></table>`;
+}
+
+function renderWhois(d) {
+  if (d.error && !d.registrar && !Object.keys(d.dns_records || {}).length)
+    return `<div class="alert alert-warning small py-1 mt-2">${esc(d.error)}</div>`;
+
+  let ageBadge = '';
+  if (d.domain_age_days != null) {
+    const age = d.domain_age_days;
+    const cls = age < 30 ? 'danger' : age < 180 ? 'warning' : 'secondary';
+    const label = age < 30 ? `${age}d old — very new` : age < 365 ? `${age}d old` : `${Math.floor(age/365)}y old`;
+    ageBadge = ` <span class="badge bg-${cls}">${label}</span>`;
+  }
+
+  const rows = [
+    ['Registrar',    d.registrar],
+    ['Created',      d.created],
+    ['Expires',      d.expires],
+    ['Updated',      d.updated],
+    ['Status',       d.status],
+    ['Name servers', d.name_servers],
+    ['Registrant',   [d.registrant_name, d.registrant_org, d.registrant_country].filter(Boolean).join(', ') || null],
+    ['Abuse email',  d.abuse_email],
+  ];
+
+  let dns = '';
+  const recs = d.dns_records || {};
+  if (Object.keys(recs).length) {
+    const dnsRows = Object.entries(recs).map(([type, vals]) => {
+      const ghpFlag = type === 'CNAME' && vals.some(v => v.endsWith('.github.io'))
+        ? ' <span class="badge bg-danger ms-1">GitHub Pages CNAME</span>' : '';
+      return `<tr>
+        <td class="text-muted ps-3 pe-3 align-top" style="width:140px"><code class="text-warning">${esc(type)}</code></td>
+        <td>${vals.map(esc).join('<br>')}${ghpFlag}</td></tr>`;
+    }).join('');
+    dns = `<div class="border-top border-secondary">
+      <p class="text-muted small mb-0 px-3 pt-2" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.05em">DNS Records</p>
+      <table class="table table-dark table-sm mb-0"><tbody>${dnsRows}</tbody></table>
+    </div>`;
+  }
+
+  return `<div class="card bg-black border-info border-opacity-25 mt-2">
+    <div class="card-header py-1 small fw-semibold text-info d-flex align-items-center gap-2">
+      <i class="bi bi-card-text"></i> WHOIS — ${esc(d.domain)}${ageBadge}
+    </div>
+    <div class="card-body p-0">${intelTable(rows)}${dns}</div>
+  </div>`;
+}
+
+function renderReputation(d) {
+  if (d.error)
+    return `<div class="alert alert-warning small py-1 mt-2">${esc(d.error)}</div>`;
+
+  const statusIcon = {
+    listed:        '<i class="bi bi-x-octagon-fill text-danger"></i>',
+    not_listed:    '<i class="bi bi-check-circle-fill text-success"></i>',
+    not_found:     '<i class="bi bi-dash-circle text-secondary"></i>',
+    not_configured:'<i class="bi bi-gear text-muted"></i>',
+    error:         '<i class="bi bi-exclamation-triangle text-warning"></i>',
+  };
+  const statusLabel = {
+    listed:        '<span class="text-danger fw-semibold">Listed</span>',
+    not_listed:    '<span class="text-success">Clean</span>',
+    not_found:     '<span class="text-muted">Not analysed</span>',
+    not_configured:'<span class="text-muted">Not configured</span>',
+    error:         '<span class="text-warning">Error</span>',
+  };
+
+  const rows = (d.checks || []).map(c => {
+    const icon  = statusIcon[c.status]  || statusIcon.error;
+    const label = statusLabel[c.status] || `<span>${esc(c.status)}</span>`;
+    let detail = '';
+    if (c.threat)        detail += ` — ${esc(c.threat)}`;
+    if (c.url_status)    detail += ` (${esc(c.url_status)})`;
+    if (c.reason)        detail += ` — ${esc(c.reason)}`;
+    if (c.threat_types)  detail += ` — ${c.threat_types.map(esc).join(', ')}`;
+    if (c.malicious != null && c.total_engines)
+      detail += ` — ${esc(c.malicious)} malicious, ${esc(c.suspicious)} suspicious / ${esc(c.total_engines)} engines`;
+    if (c.vt_link)       detail += ` <a href="${esc(c.vt_link)}" target="_blank" class="text-info small">↗</a>`;
+    if (c.reference)     detail += ` <a href="${esc(c.reference)}" target="_blank" class="text-info small">↗</a>`;
+    if (c.detail)        detail += ` <span class="text-muted">${esc(c.detail)}</span>`;
+    return `<tr>
+      <td class="ps-3 pe-2 align-top" style="width:170px;white-space:nowrap">${icon} ${esc(c.source)}</td>
+      <td>${label}${detail}</td></tr>`;
+  }).join('');
+
+  const listedCount = d.listed_count ?? 0;
+  const checkedCount = d.checked_count ?? 0;
+  const summary = listedCount > 0
+    ? `<span class="badge bg-danger ms-2">${listedCount} listed</span>`
+    : `<span class="badge bg-success ms-2">Clean on ${checkedCount} source${checkedCount !== 1 ? 's' : ''}</span>`;
+
+  return `<div class="card bg-black border-info border-opacity-25 mt-2">
+    <div class="card-header py-1 small fw-semibold text-info d-flex align-items-center gap-2">
+      <i class="bi bi-shield-check"></i> Reputation — ${esc(d.domain)}${summary}
+    </div>
+    <div class="card-body p-0">
+      <table class="table table-dark table-sm mb-0"><tbody>${rows}</tbody></table>
+    </div>
+  </div>`;
+}
+
+function renderHost(d) {
+  if (d.error && !d.ip)
+    return `<div class="alert alert-warning small py-1 mt-2">${esc(d.error)}</div>`;
+
+  let headerBadge = '';
+  if (d.github_pages) {
+    const id = d.github_pages_user ? `${esc(d.github_pages_user)}.github.io` : 'GitHub Pages';
+    headerBadge = `<span class="badge bg-danger">${id}</span>`;
+  } else if (d.provider_name) {
+    headerBadge = `<span class="badge bg-secondary">${esc(d.provider_name)}</span>`;
+  }
+
+  const rows = [
+    ['IP address',   d.ip],
+    ['ASN',          d.asn ? `AS${d.asn}` + (d.asn_description ? ` — ${d.asn_description}` : '') : null],
+    ['Network',      d.asn_cidr],
+    ['Country',      d.asn_country],
+    ['Organisation', d.org],
+    ['Provider',     d.provider_name],
+    ['Abuse email',  d.abuse_email],
+  ];
+
+  let formLink = '';
+  if (d.abuse_form)
+    formLink = `<div class="px-3 pb-2 small"><a href="${esc(d.abuse_form)}" target="_blank" class="text-info">Abuse form ↗</a></div>`;
+
+  let warning = '';
+  if (d.rdap_error)
+    warning = `<div class="px-3 pb-2 small text-warning"><i class="bi bi-exclamation-triangle"></i> RDAP: ${esc(d.rdap_error)}</div>`;
+
+  return `<div class="card bg-black border-info border-opacity-25 mt-2">
+    <div class="card-header py-1 small fw-semibold text-info d-flex align-items-center gap-2">
+      <i class="bi bi-hdd-network"></i> Host — ${esc(d.domain)} ${headerBadge}
+    </div>
+    <div class="card-body p-0">${intelTable(rows)}${formLink}${warning}</div>
+  </div>`;
+}
+</script>
+
+{% endblock %}

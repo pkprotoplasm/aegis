@@ -1,0 +1,26 @@
+# Environment
+.env
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Generated assets
+aegis-logo.png
+web/public/aegis-logo.svg
+
+# Node / React
+web/node_modules/
+web/dist/
+
+# macOS
+.DS_Store
