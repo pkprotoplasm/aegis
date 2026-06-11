@@ -96,24 +96,14 @@ def get_github_report_url(url):
     return report_url, f"GitHub {kind}"
 
 
-def send_github_pages_abuse_email(original_url, original_domain, gh_username,
-                                   reporter_context="", case_id="", triage_results=None):
-    """
-    Email abuse@github.com reporting a GitHub Pages phishing site.
-    Returns (success: bool, message: str).
-    """
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(os.getenv("SMTP_PORT", 587))
-    smtp_user = os.getenv("SMTP_USER", "")
-    smtp_pass = os.getenv("SMTP_PASS", "")
-    smtp_from = os.getenv("SMTP_FROM", smtp_user)
-
-    if not smtp_user or not smtp_pass:
-        return False, "SMTP credentials not configured"
-
+def _compose_github_pages_email(original_url, original_domain, gh_username,
+                                 reporter_context="", case_id="", triage_results=None,
+                                 extra_context=""):
+    """Return (subject, body) for a GitHub Pages abuse email without sending it."""
     pages_identity = f"{gh_username}.github.io" if gh_username else "GitHub Pages (username unknown)"
     case_tag = f"[Case {case_id}] " if case_id else ""
     subject = f"{case_tag}GitHub Pages AUP Violation — Phishing Site: {original_domain}"
+    extra = f"\n\nAdditional notes from our team:\n{extra_context.strip()}" if extra_context and extra_context.strip() else ""
     body = f"""Dear GitHub Trust & Safety Team,
 
 I am writing to report a phishing/scam site hosted on GitHub Pages that is violating GitHub's Acceptable Use Policy.
@@ -129,13 +119,36 @@ I request that you investigate and take down this GitHub Pages site immediately 
 https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies
 
 Additional context from the original reporter:
-{reporter_context or "No additional context provided."}{_triage_section(triage_results)}
+{reporter_context or "No additional context provided."}{_triage_section(triage_results)}{extra}
 
 Please include the case reference ({case_id or "N/A"}) in any reply so we can track your response.
 
 Regards,
 Aegis — Automated Effective Guard against Information Stealers
 """
+    return subject, body
+
+
+def send_github_pages_abuse_email(original_url, original_domain, gh_username,
+                                   reporter_context="", case_id="", triage_results=None,
+                                   extra_context=""):
+    """
+    Email abuse@github.com reporting a GitHub Pages phishing site.
+    Returns (success: bool, message: str).
+    """
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pass = os.getenv("SMTP_PASS", "")
+    smtp_from = os.getenv("SMTP_FROM", smtp_user)
+
+    if not smtp_user or not smtp_pass:
+        return False, "SMTP credentials not configured"
+
+    pages_identity = f"{gh_username}.github.io" if gh_username else "GitHub Pages (username unknown)"
+    subject, body = _compose_github_pages_email(original_url, original_domain, gh_username,
+                                                 reporter_context, case_id, triage_results,
+                                                 extra_context)
 
     msg = MIMEMultipart()
     msg["From"] = smtp_from
@@ -156,3 +169,12 @@ Aegis — Automated Effective Guard against Information Stealers
     except Exception as e:
         print(f"github: SMTP error sending to abuse@github.com — {e}")
         return False, "Failed to send email"
+
+
+def preview_github_pages(original_url, original_domain, gh_username,
+                          reporter_context="", case_id="", triage_results=None, extra_context=""):
+    """Return {to, subject, body} for a GitHub Pages abuse email without sending."""
+    subject, body = _compose_github_pages_email(original_url, original_domain, gh_username,
+                                                 reporter_context, case_id, triage_results,
+                                                 extra_context)
+    return {"to": "abuse@github.com", "subject": subject, "body": body}

@@ -76,6 +76,134 @@ function StatusButtons({ reportId, currentStatus, onUpdated, onFlash }) {
   )
 }
 
+// ─── Email Preview Modal ─────────────────────────────────────────────────────
+
+function EmailPreviewModal({ linkId, action, onClose, onSent, onFlash }) {
+  const [preview, setPreview]           = useState(null)
+  const [loadError, setLoadError]       = useState(null)
+  const [extraContext, setExtraContext] = useState('')
+  const [previewing, setPreviewing]     = useState(false)
+  const [sending, setSending]           = useState(false)
+
+  // Fetch the preview whenever extraContext changes (debounced 400 ms)
+  useEffect(() => {
+    let cancelled = false
+    setPreviewing(true)
+    setLoadError(null)
+    const timer = setTimeout(() => {
+      api.previewLinkAction(linkId, action, extraContext)
+        .then((data) => { if (!cancelled) { setPreview(data); setPreviewing(false) } })
+        .catch((err) => { if (!cancelled) { setLoadError(err.message); setPreviewing(false) } })
+    }, 400)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [linkId, action, extraContext])
+
+  async function handleSend() {
+    if (sending) return
+    setSending(true)
+    try {
+      const result = await api.linkAction(linkId, action, extraContext)
+      onFlash({ type: 'success', message: result.notes || 'Email sent.' })
+      onSent()
+      onClose()
+    } catch (err) {
+      onFlash({ type: 'error', message: `Send failed: ${err.message}` })
+      setSending(false)
+    }
+  }
+
+  return (
+    <div
+      className="modal d-block"
+      style={{ background: 'rgba(0,0,0,0.6)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="modal-dialog modal-lg modal-dialog-scrollable">
+        <div className="modal-content bg-dark text-light border-secondary">
+          <div className="modal-header border-secondary">
+            <h5 className="modal-title">
+              <i className="bi bi-envelope me-2"></i>Email Preview
+            </h5>
+            <button type="button" className="btn-close btn-close-white" onClick={onClose} />
+          </div>
+
+          <div className="modal-body">
+            {loadError ? (
+              <div className="alert alert-danger">
+                <i className="bi bi-exclamation-triangle me-2"></i>{loadError}
+              </div>
+            ) : !preview ? (
+              <div className="text-center py-4">
+                <div className="spinner-border spinner-border-sm text-secondary me-2" />
+                <span className="text-muted">Loading preview…</span>
+              </div>
+            ) : (
+              <>
+                <div className="mb-3 small">
+                  <div className="row g-2 mb-2">
+                    <div className="col-auto text-muted fw-semibold" style={{ width: '4.5rem' }}>To:</div>
+                    <div className="col font-monospace">{preview.to}</div>
+                  </div>
+                  <div className="row g-2">
+                    <div className="col-auto text-muted fw-semibold" style={{ width: '4.5rem' }}>Subject:</div>
+                    <div className="col">{preview.subject}</div>
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <label className="form-label text-muted small fw-semibold text-uppercase" style={{ letterSpacing: '0.05em' }}>
+                    Body
+                    {previewing && <span className="spinner-border spinner-border-sm ms-2 text-secondary" style={{ width: '0.75rem', height: '0.75rem' }} />}
+                  </label>
+                  <pre
+                    className="border border-secondary rounded p-3 small text-light"
+                    style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '320px', overflowY: 'auto', background: '#1a1f2e' }}
+                  >
+                    {preview.body}
+                  </pre>
+                </div>
+              </>
+            )}
+
+            <div>
+              <label className="form-label text-muted small fw-semibold text-uppercase" style={{ letterSpacing: '0.05em' }}>
+                Additional notes (optional)
+              </label>
+              <textarea
+                className="form-control form-control-sm bg-dark text-light border-secondary"
+                rows={3}
+                placeholder="Extra context to include in the email…"
+                value={extraContext}
+                onChange={(e) => setExtraContext(e.target.value)}
+                disabled={sending}
+                style={{ resize: 'vertical' }}
+              />
+              <div className="form-text text-muted">
+                Appended to the email under "Additional notes from our team."
+              </div>
+            </div>
+          </div>
+
+          <div className="modal-footer border-secondary">
+            <button className="btn btn-secondary btn-sm" onClick={onClose} disabled={sending}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleSend}
+              disabled={sending || !!loadError || !preview}
+            >
+              {sending
+                ? <><span className="spinner-border spinner-border-sm me-1" />Sending…</>
+                : <><i className="bi bi-send me-1"></i>Send Email</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Link Card ────────────────────────────────────────────────────────────────
 
 function isGitHubUrl(url) {
@@ -88,7 +216,8 @@ function isGitHubUrl(url) {
 }
 
 function LinkCard({ link, onAction, onFlash }) {
-  const [actionLoading, setActionLoading] = useState({})
+  const [actionLoading, setActionLoading]     = useState({})
+  const [emailPreviewAction, setEmailPreviewAction] = useState(null)
 
   async function handleAction(action) {
     setActionLoading((prev) => ({ ...prev, [action]: true }))
@@ -113,6 +242,17 @@ function LinkCard({ link, onAction, onFlash }) {
   const showGitHubReportBtn = isGitHubUrl(link.url)
 
   return (
+    <>
+      {emailPreviewAction && (
+        <EmailPreviewModal
+          linkId={link.id}
+          action={emailPreviewAction}
+          onClose={() => setEmailPreviewAction(null)}
+          onSent={onAction}
+          onFlash={onFlash}
+        />
+      )}
+
     <div className={`card border-${borderColor} mb-3`}>
       <div className="card-header d-flex align-items-start justify-content-between flex-wrap gap-2">
         <div>
@@ -159,41 +299,26 @@ function LinkCard({ link, onAction, onFlash }) {
           <div className="d-flex gap-2 flex-wrap">
             <button
               className="btn btn-sm btn-outline-primary"
-              disabled={!!actionLoading['whois']}
-              onClick={() => handleAction('whois')}
+              onClick={() => setEmailPreviewAction('whois')}
             >
-              {actionLoading['whois'] ? (
-                <span className="spinner-border spinner-border-sm me-1" />
-              ) : (
-                <i className="bi bi-envelope me-1"></i>
-              )}
+              <i className="bi bi-envelope me-1"></i>
               Email Registrar
             </button>
 
             {link.is_github_pages ? (
               <button
                 className="btn btn-sm btn-danger"
-                disabled={!!actionLoading['hosting']}
-                onClick={() => handleAction('hosting')}
+                onClick={() => setEmailPreviewAction('hosting')}
               >
-                {actionLoading['hosting'] ? (
-                  <span className="spinner-border spinner-border-sm me-1" />
-                ) : (
-                  <i className="bi bi-github me-1"></i>
-                )}
+                <i className="bi bi-github me-1"></i>
                 Email abuse@github.com
               </button>
             ) : (
               <button
                 className="btn btn-sm btn-outline-primary"
-                disabled={!!actionLoading['hosting']}
-                onClick={() => handleAction('hosting')}
+                onClick={() => setEmailPreviewAction('hosting')}
               >
-                {actionLoading['hosting'] ? (
-                  <span className="spinner-border spinner-border-sm me-1" />
-                ) : (
-                  <i className="bi bi-envelope me-1"></i>
-                )}
+                <i className="bi bi-envelope me-1"></i>
                 Email Host
               </button>
             )}
@@ -305,6 +430,7 @@ function LinkCard({ link, onAction, onFlash }) {
         )}
       </div>
     </div>
+    </>
   )
 }
 
