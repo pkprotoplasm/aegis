@@ -7,6 +7,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from urllib.parse import urlparse, quote
 from abuse.dryrun import is_dry_run
+from abuse import triage_section as _triage_section
 
 try:
     import dns.resolver as _dns_resolver
@@ -93,18 +94,6 @@ def get_github_report_url(url):
 
     report_url = f"{_ABUSE_BASE}?url={quote(url, safe='')}"
     return report_url, f"GitHub {kind}"
-
-
-def _triage_section(triage_results):
-    if not triage_results:
-        return ""
-    lines = ["\nMalware analysis (Recorded Future Triage):"]
-    for t in triage_results:
-        if t.get("report_url"):
-            lines.append(f"  • {t['exe_url']}\n    Report: {t['report_url']}")
-        else:
-            lines.append(f"  • {t['exe_url']} (analysis pending)")
-    return "\n".join(lines)
 
 
 def send_github_pages_abuse_email(original_url, original_domain, gh_username,

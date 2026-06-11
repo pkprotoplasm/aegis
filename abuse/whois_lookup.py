@@ -6,6 +6,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from urllib.parse import urlparse
 from abuse.dryrun import is_dry_run
+from abuse import triage_section as _triage_section
 
 
 def get_registrar_abuse_email(domain):
@@ -22,18 +23,6 @@ def get_registrar_abuse_email(domain):
     except Exception:
         pass
     return None, None
-
-
-def _triage_section(triage_results):
-    if not triage_results:
-        return ""
-    lines = ["\nMalware analysis (Recorded Future Triage):"]
-    for t in triage_results:
-        if t.get("report_url"):
-            lines.append(f"  • {t['exe_url']}\n    Report: {t['report_url']}")
-        else:
-            lines.append(f"  • {t['exe_url']} (analysis pending)")
-    return "\n".join(lines)
 
 
 def send_abuse_email(to_addr, domain, url, reporter_context, case_id="", triage_results=None):

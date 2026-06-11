@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Management CLI for Aegis. Run with: python manage.py <command> [args]"""
+import os
 import sys
 from dotenv import load_dotenv
 
@@ -60,10 +61,60 @@ def cmd_list_admins(args):
         print(f"  {role_label} {a['discord_name']} ({a['discord_id']})  added {a['added_at'][:10]}")
 
 
+def cmd_retriage(args):
+    """retriage <case_id>  —  Re-scan all links in a report and submit any new sample files to Triage."""
+    if len(args) < 1:
+        print("Usage: python manage.py retriage <case_id>")
+        sys.exit(1)
+
+    api_key = os.getenv("TRIAGE_API_KEY", "")
+    if not api_key:
+        print("TRIAGE_API_KEY is not set in .env")
+        sys.exit(1)
+
+    db.init_db()
+
+    from abuse import triage as triage_mod
+
+    report = db.get_report_by_case_id(args[0])
+    if not report:
+        print(f"No report found for case ID: {args[0]!r}")
+        sys.exit(1)
+
+    print(f"Report {report['case_id']} — {len(report['links'])} link(s)")
+
+    for link in report["links"]:
+        print(f"\n  Scanning: {link['url']}")
+        try:
+            sample_urls = triage_mod.scan_for_sample_links(link["url"])
+        except Exception as e:
+            print(f"    Scan error: {e}")
+            continue
+
+        if not sample_urls:
+            print("    No sample files found.")
+            continue
+
+        already_submitted = {t["exe_url"] for t in link["triage_results"]}
+
+        for sample_url in sample_urls[:5]:
+            if sample_url in already_submitted:
+                print(f"    Already submitted: {sample_url}")
+                continue
+            try:
+                sample_id, report_url = triage_mod.submit_to_triage(sample_url, api_key)
+                db.store_triage_result(link["id"], sample_url, sample_id, report_url)
+                print(f"    Submitted: {sample_url} → {report_url}")
+            except Exception as e:
+                db.store_triage_result(link["id"], sample_url, None, None, error=str(e))
+                print(f"    Submission failed for {sample_url}: {e}")
+
+
 COMMANDS = {
     "add-superadmin":     cmd_add_superadmin,
     "replace-superadmin": cmd_replace_superadmin,
     "list-admins":        cmd_list_admins,
+    "retriage":           cmd_retriage,
 }
 
 if __name__ == "__main__":

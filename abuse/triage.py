@@ -1,4 +1,4 @@
-"""Recorded Future Triage malware sandbox — EXE detection and submission."""
+"""Recorded Future Triage malware sandbox — sample detection and submission."""
 import re
 import requests
 from html.parser import HTMLParser
@@ -7,8 +7,37 @@ from urllib.parse import urlparse, urljoin
 from abuse.dryrun import is_dry_run
 
 _TRIAGE_API = "https://tria.ge/api/v0"
-_EXE_RE     = re.compile(r'\.exe(\?[^\s"\'<>]*)?$', re.IGNORECASE)
 _MAX_BYTES  = 512 * 1024  # 512 KB page read limit
+
+# All file types accepted by Recorded Future Triage
+# https://us-sandbox.recordedfuture.com/docs/cloud-api/filetypes/
+_SAMPLE_EXTS = {
+    # executables
+    "dll", "exe", "msi",
+    # documents
+    "chm", "hta", "iqy",
+    "doc", "xls", "ppt",                         # Office 2003
+    "docx", "xlsx", "pptx", "docm", "xlsm", "pptm",  # Office 2007+
+    "odt", "ods", "odp",                          # OpenOffice
+    "pdf", "rtf", "slk", "swf", "html", "htm",
+    # scripts
+    "bat", "ps1", "js", "jse", "vbe", "pl", "vbs", "wsf",
+    # compiled / bytecode
+    "elf", "jar", "apk", "dex",
+    # macOS
+    "app", "dmg", "pkg", "scpt", "sh",
+    # shortcuts / launchers
+    "lnk", "url", "jnlp",
+    # images (QR code / SVG analysis)
+    "svg", "png", "jpg", "jpeg",
+    # archives
+    "7z", "ace", "bz2", "cab", "daa", "eml", "gz", "img", "iso",
+    "lz", "lzh", "msg", "rar", "tar", "tnef", "vbn", "vhd", "xar", "xz", "zip",
+}
+
+# Build pattern: longest extensions first to avoid short prefixes shadowing longer ones
+_ext_alts = "|".join(re.escape(e) for e in sorted(_SAMPLE_EXTS, key=len, reverse=True))
+_SAMPLE_RE = re.compile(rf'\.({_ext_alts})(\?[^\s"\'<>]*)?$', re.IGNORECASE)
 
 
 class _LinkExtractor(HTMLParser):
@@ -28,12 +57,13 @@ class _LinkExtractor(HTMLParser):
             self.links.append(urljoin(self._base, href))
 
 
-def scan_for_exe_links(url, timeout=10):
+def scan_for_sample_links(url, timeout=10):
     """
-    Return a deduplicated list of absolute .exe URLs reachable from url.
-    If url itself points to an EXE it is returned directly without fetching.
+    Return a deduplicated list of absolute sample-file URLs reachable from url.
+    Matches all file types supported by Recorded Future Triage (see _SAMPLE_EXTS).
+    If url itself is a sample file it is returned directly without fetching.
     """
-    if _EXE_RE.search(urlparse(url).path):
+    if _SAMPLE_RE.search(urlparse(url).path):
         return [url]
 
     try:
@@ -61,25 +91,25 @@ def scan_for_exe_links(url, timeout=10):
 
     seen, results = set(), []
     for link in parser.links:
-        if _EXE_RE.search(urlparse(link).path) and link not in seen:
+        if _SAMPLE_RE.search(urlparse(link).path) and link not in seen:
             seen.add(link)
             results.append(link)
     return results
 
 
-def submit_to_triage(exe_url, api_key):
+def submit_to_triage(sample_url, api_key):
     """
-    Submit an EXE URL to Recorded Future Triage.
+    Submit a sample URL to Recorded Future Triage.
     Returns (sample_id: str, report_url: str).
     Raises on HTTP or API error.
     """
     if is_dry_run():
-        print(f"[DRY RUN] Would submit to Triage: {exe_url!r}")
+        print(f"[DRY RUN] Would submit to Triage: {sample_url!r}")
         return "DRYRUN-00000000", "https://tria.ge/DRYRUN-00000000"
 
     resp = requests.post(
         f"{_TRIAGE_API}/samples",
-        json={"kind": "url", "url": exe_url},
+        json={"kind": "url", "url": sample_url},
         headers={
             "Authorization": f"Bearer {api_key}",
             "User-Agent": "aegis-reporter/1.0",
