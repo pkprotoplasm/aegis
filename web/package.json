@@ -12,13 +12,13 @@
   },
   "dependencies": {
     "@uiw/react-md-editor": "^4.1.1",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
-    "react-router-dom": "^7.15.1"
+    "react-router-dom": "^7.16.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.2",
-    "vite": "^8.0.14"
+    "vite": "^8.0.16"
   }
 }
