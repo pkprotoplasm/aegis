@@ -34,8 +34,11 @@ export const api = {
   updateReportStatus: (id, status) =>
     request('PUT', `/reports/${id}/status`, { status }),
 
-  linkAction: (id, action) =>
-    request('POST', `/links/${id}/action`, { action }),
+  linkAction: (id, action, extra_context = '') =>
+    request('POST', `/links/${id}/action`, { action, extra_context }),
+
+  previewLinkAction: (id, action, extra_context = '') =>
+    request('POST', `/links/${id}/preview`, { action, extra_context }),
 
   getWhois: (id) => request('GET', `/links/${id}/intel/whois`),
   getHost: (id) => request('GET', `/links/${id}/intel/host`),

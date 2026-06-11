@@ -77,18 +77,12 @@ def get_hosting_info(ip):
         return None, None, None, None
 
 
-def send_hosting_abuse_email(to_addr, domain, ip, url, reporter_context, case_id="", triage_results=None):
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(os.getenv("SMTP_PORT", 587))
-    smtp_user = os.getenv("SMTP_USER", "")
-    smtp_pass = os.getenv("SMTP_PASS", "")
-    smtp_from = os.getenv("SMTP_FROM", smtp_user)
-
-    if not smtp_user or not smtp_pass:
-        return False, "SMTP credentials not configured"
-
+def _compose_hosting_email(to_addr, domain, ip, url, reporter_context, case_id="",
+                            triage_results=None, extra_context=""):
+    """Return (subject, body) for a hosting abuse email without sending it."""
     case_tag = f"[Case {case_id}] " if case_id else ""
     subject = f"{case_tag}Abuse Report: Phishing/Scam Hosted Content — {domain}"
+    extra = f"\n\nAdditional notes from our team:\n{extra_context.strip()}" if extra_context and extra_context.strip() else ""
     body = f"""Dear Abuse Team,
 
 I am writing to report content hosted on your network that is being used in a scam/phishing campaign.
@@ -101,13 +95,29 @@ Resolved IP: {ip}
 Additional context:
 {reporter_context or "No additional context provided."}
 
-I request that you investigate and suspend this content immediately.{_triage_section(triage_results)}
+I request that you investigate and suspend this content immediately.{_triage_section(triage_results)}{extra}
 
 Please include the case reference ({case_id or "N/A"}) in any reply so we can track your response.
 
 Regards,
 Aegis — Automated Effective Guard against Information Stealers
 """
+    return subject, body
+
+
+def send_hosting_abuse_email(to_addr, domain, ip, url, reporter_context, case_id="",
+                              triage_results=None, extra_context=""):
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pass = os.getenv("SMTP_PASS", "")
+    smtp_from = os.getenv("SMTP_FROM", smtp_user)
+
+    if not smtp_user or not smtp_pass:
+        return False, "SMTP credentials not configured"
+
+    subject, body = _compose_hosting_email(to_addr, domain, ip, url, reporter_context,
+                                            case_id, triage_results, extra_context)
 
     msg = MIMEMultipart()
     msg["From"] = smtp_from
@@ -130,7 +140,39 @@ Aegis — Automated Effective Guard against Information Stealers
         return False, "Failed to send email"
 
 
-def report_hosting(url, reporter_context="", case_id="", triage_results=None):
+def preview_hosting(url, reporter_context="", case_id="", triage_results=None, extra_context=""):
+    """
+    Detect the hosting provider / abuse contact and return {to, subject, body}
+    without sending. Raises ValueError if no email contact is found.
+    """
+    from abuse.github import preview_github_pages
+
+    domain = urlparse(url).hostname or ""
+    if not domain:
+        raise ValueError("Could not extract domain from URL")
+
+    is_gh_pages, gh_username = detect_github_pages(domain)
+    if is_gh_pages:
+        return preview_github_pages(url, domain, gh_username, reporter_context,
+                                     case_id, triage_results, extra_context)
+
+    ip = resolve_ip(domain)
+    if not ip:
+        raise ValueError(f"Could not resolve IP for {domain}")
+
+    asn, provider, abuse_email, abuse_form = get_hosting_info(ip)
+    if not abuse_email:
+        raise ValueError(
+            f"No abuse email for {provider or domain} — use form: {abuse_form}" if abuse_form
+            else f"No abuse contact found for {domain}"
+        )
+
+    subject, body = _compose_hosting_email(abuse_email, domain, ip, url, reporter_context,
+                                            case_id, triage_results, extra_context)
+    return {"to": abuse_email, "subject": subject, "body": body}
+
+
+def report_hosting(url, reporter_context="", case_id="", triage_results=None, extra_context=""):
     """
     Detect hosting provider for a URL and send/return abuse report info.
     Returns (success, target, notes, abuse_form_url).
@@ -147,7 +189,7 @@ def report_hosting(url, reporter_context="", case_id="", triage_results=None):
     is_gh_pages, gh_username = detect_github_pages(domain)
     if is_gh_pages:
         success, msg = send_github_pages_abuse_email(
-            url, domain, gh_username, reporter_context, case_id, triage_results
+            url, domain, gh_username, reporter_context, case_id, triage_results, extra_context
         )
         pages_id = f"{gh_username}.github.io" if gh_username else "GitHub Pages"
         return success, "abuse@github.com", f"GitHub Pages ({pages_id}) — {msg}", None
@@ -165,7 +207,7 @@ def report_hosting(url, reporter_context="", case_id="", triage_results=None):
 
     if abuse_email:
         success, msg = send_hosting_abuse_email(abuse_email, domain, ip, url, reporter_context,
-                                                 case_id, triage_results)
+                                                 case_id, triage_results, extra_context)
         return success, abuse_email, f"{target_desc} — {msg}", abuse_form
     elif abuse_form:
         return True, abuse_form, f"{target_desc} — use form: {abuse_form}", abuse_form

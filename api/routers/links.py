@@ -11,6 +11,40 @@ router = APIRouter(dependencies=[Depends(require_user)])
 
 class ActionRequest(BaseModel):
     action: str
+    extra_context: str = ""
+
+
+@router.post("/links/{link_id}/preview")
+def preview_action(link_id: int, body: ActionRequest):
+    """
+    Return the email that would be sent for an action without sending it.
+    Returns {to, subject, body}. Only supported for email actions (whois, hosting).
+    """
+    action = body.action
+    link = db.get_link(link_id)
+    if not link:
+        raise HTTPException(status_code=404, detail="Link not found")
+
+    report = db.get_report(link["report_id"])
+    context = report.get("context", "") if report else ""
+    url = link["url"]
+    case_id = (report.get("case_id") or "") if report else ""
+    triage_results = db.get_triage_results_for_link(link_id)
+
+    try:
+        if action == "whois":
+            return whois_lookup.preview_whois(url, context, case_id, triage_results,
+                                              body.extra_context)
+        elif action == "hosting":
+            return hosting.preview_hosting(url, context, case_id, triage_results,
+                                           body.extra_context)
+        raise HTTPException(status_code=400, detail=f"Preview not supported for action '{action}'")
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=502, detail="Preview failed")
 
 
 @router.post("/links/{link_id}/action")
@@ -28,13 +62,15 @@ def take_action(link_id: int, body: ActionRequest):
 
     try:
         if action == "whois":
-            success, target, notes = whois_lookup.report_whois(url, context, case_id, triage_results)
+            success, target, notes = whois_lookup.report_whois(url, context, case_id,
+                                                                triage_results, body.extra_context)
             db.log_abuse_action(link_id, "whois_email", target,
                                 "sent" if success else "failed", notes)
             return {"success": success, "notes": notes}
 
         elif action == "hosting":
-            success, target, notes, form_url = hosting.report_hosting(url, context, case_id, triage_results)
+            success, target, notes, form_url = hosting.report_hosting(url, context, case_id,
+                                                                       triage_results, body.extra_context)
             db.log_abuse_action(link_id, "hosting", target,
                                 "sent" if success else "failed", notes)
             return {"success": success, "notes": notes}
