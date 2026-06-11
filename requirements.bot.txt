@@ -4,3 +4,5 @@ python-whois>=0.9.6
 ipwhois>=1.3.0
 requests>=2.34.2
 dnspython>=2.8.0
+# Optional: headless browser scanning for JS-obfuscated download pages (TRIAGE_BROWSER_SCAN=1)
+playwright>=1.49.0

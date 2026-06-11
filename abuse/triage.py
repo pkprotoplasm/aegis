@@ -1,4 +1,5 @@
 """Recorded Future Triage malware sandbox — sample detection and submission."""
+import os
 import re
 import requests
 from html.parser import HTMLParser
@@ -57,15 +58,100 @@ class _LinkExtractor(HTMLParser):
             self.links.append(urljoin(self._base, href))
 
 
+# Selectors tried in order when clicking download buttons during browser scan
+_CLICK_SELECTORS = [
+    'button:has-text("Download")',
+    'a:has-text("Download")',
+    'button:has-text("Install")',
+    'a:has-text("Install")',
+    '[id*="download"]',
+    '[id*="install"]',
+    '[class*="download-btn"]',
+]
+
+
+def _browser_scan(url, timeout=30):
+    """
+    Load the page in a headless Chromium browser, execute JavaScript, and
+    intercept any network requests or Content-Disposition responses that match
+    a Triage-supported file extension. Also attempts to click visible download
+    buttons to trigger JS-driven file downloads.
+
+    Requires: `pip install playwright && playwright install chromium`
+    Only runs when TRIAGE_BROWSER_SCAN=1 is set.
+    """
+    try:
+        from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+    except ImportError:
+        print("triage: playwright not installed — browser scan skipped")
+        return []
+
+    found = set()
+
+    def _on_request(req):
+        if _SAMPLE_RE.search(urlparse(req.url).path):
+            found.add(req.url)
+
+    def _on_response(resp):
+        # Catch downloads served with Content-Disposition: attachment
+        cd = resp.headers.get("content-disposition", "")
+        if "attachment" in cd.lower():
+            m = re.search(r'filename\s*=\s*["\']?([^"\';\r\n]+)', cd, re.IGNORECASE)
+            if m and _SAMPLE_RE.search(m.group(1).strip()):
+                found.add(resp.url)
+
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.on("request", _on_request)
+            page.on("response", _on_response)
+
+            try:
+                page.goto(url, timeout=timeout * 1000, wait_until="domcontentloaded")
+                page.wait_for_load_state("networkidle", timeout=5000)
+            except Exception:
+                pass  # proceed with whatever loaded
+
+            for selector in _CLICK_SELECTORS:
+                try:
+                    locator = page.locator(selector).first
+                    try:
+                        with page.expect_download(timeout=4000) as dl_info:
+                            locator.click(timeout=2000)
+                        dl = dl_info.value
+                        if _SAMPLE_RE.search(dl.suggested_filename or ""):
+                            found.add(dl.url)
+                    except PWTimeout:
+                        # No browser download dialog — JS may have handled it;
+                        # on_request/on_response will have captured it
+                        pass
+                    break  # stop after first button successfully clicked
+                except Exception:
+                    continue
+
+            browser.close()
+    except Exception as e:
+        print(f"triage: browser scan error for {url!r}: {e}")
+
+    return list(found)
+
+
 def scan_for_sample_links(url, timeout=10):
     """
     Return a deduplicated list of absolute sample-file URLs reachable from url.
     Matches all file types supported by Recorded Future Triage (see _SAMPLE_EXTS).
-    If url itself is a sample file it is returned directly without fetching.
+
+    Always runs a fast static HTML scan. When TRIAGE_BROWSER_SCAN=1 is set,
+    also loads the page in a headless browser to catch JS-driven downloads
+    (e.g. links hidden behind obfuscated code or button click handlers).
     """
     if _SAMPLE_RE.search(urlparse(url).path):
         return [url]
 
+    seen, results = set(), []
+
+    # --- Static HTML scan ---
     try:
         resp = requests.get(
             url,
@@ -75,25 +161,28 @@ def scan_for_sample_links(url, timeout=10):
             allow_redirects=True,
         )
         resp.raise_for_status()
-        if "html" not in resp.headers.get("Content-Type", ""):
-            return []
-
-        raw = b""
-        for chunk in resp.iter_content(8192):
-            raw += chunk
-            if len(raw) >= _MAX_BYTES:
-                break
+        if "html" in resp.headers.get("Content-Type", ""):
+            raw = b""
+            for chunk in resp.iter_content(8192):
+                raw += chunk
+                if len(raw) >= _MAX_BYTES:
+                    break
+            parser = _LinkExtractor(url)
+            parser.feed(raw.decode("utf-8", errors="replace"))
+            for link in parser.links:
+                if _SAMPLE_RE.search(urlparse(link).path) and link not in seen:
+                    seen.add(link)
+                    results.append(link)
     except Exception:
-        return []
+        pass
 
-    parser = _LinkExtractor(url)
-    parser.feed(raw.decode("utf-8", errors="replace"))
+    # --- Browser scan (opt-in) ---
+    if os.getenv("TRIAGE_BROWSER_SCAN") == "1":
+        for link in _browser_scan(url):
+            if link not in seen:
+                seen.add(link)
+                results.append(link)
 
-    seen, results = set(), []
-    for link in parser.links:
-        if _SAMPLE_RE.search(urlparse(link).path) and link not in seen:
-            seen.add(link)
-            results.append(link)
     return results
 
 

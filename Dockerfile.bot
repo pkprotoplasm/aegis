@@ -2,6 +2,8 @@ FROM python:3.14-slim
 WORKDIR /app
 COPY requirements.bot.txt .
 RUN pip install --no-cache-dir -r requirements.bot.txt
+# Install Playwright's Chromium browser + system deps for headless scanning (TRIAGE_BROWSER_SCAN=1)
+RUN playwright install --with-deps chromium
 COPY . .
 ENV DB_PATH=/data/scambot.db
 CMD ["python", "run_bot.py"]
