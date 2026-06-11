@@ -85,7 +85,7 @@ def _build_status_embed(report):
 
 
 async def _scan_and_triage(report_id):
-    """Scan each submitted URL for EXE links and submit them to Triage."""
+    """Scan each submitted URL for EXE/ZIP links and submit them to Triage."""
     api_key = os.getenv("TRIAGE_API_KEY", "")
     if not api_key:
         return
@@ -94,19 +94,19 @@ async def _scan_and_triage(report_id):
     links = db.get_links_for_report(report_id)
 
     for link in links:
-        exe_urls = await loop.run_in_executor(
-            None, triage_mod.scan_for_exe_links, link["url"]
+        sample_urls = await loop.run_in_executor(
+            None, triage_mod.scan_for_sample_links, link["url"]
         )
-        for exe_url in exe_urls[:5]:  # cap at 5 EXEs per link
+        for sample_url in sample_urls[:5]:  # cap at 5 samples per link
             try:
                 sample_id, report_url = await loop.run_in_executor(
-                    None, triage_mod.submit_to_triage, exe_url, api_key
+                    None, triage_mod.submit_to_triage, sample_url, api_key
                 )
-                db.store_triage_result(link["id"], exe_url, sample_id, report_url)
-                print(f"Triage: submitted {exe_url} → {report_url}")
+                db.store_triage_result(link["id"], sample_url, sample_id, report_url)
+                print(f"Triage: submitted {sample_url} → {report_url}")
             except Exception as e:
-                db.store_triage_result(link["id"], exe_url, None, None, error=str(e))
-                print(f"Triage: submission failed for {exe_url} — {e}")
+                db.store_triage_result(link["id"], sample_url, None, None, error=str(e))
+                print(f"Triage: submission failed for {sample_url} — {e}")
 
 
 async def _scan_dropbox(report_id, case_id, context):

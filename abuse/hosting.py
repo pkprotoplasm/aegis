@@ -7,6 +7,7 @@ from email.mime.multipart import MIMEMultipart
 from urllib.parse import urlparse
 from abuse.github import detect_github_pages, send_github_pages_abuse_email
 from abuse.dryrun import is_dry_run
+from abuse import triage_section as _triage_section
 
 try:
     from ipwhois import IPWhois
@@ -74,18 +75,6 @@ def get_hosting_info(ip):
         return asn, org, None, None
     except Exception:
         return None, None, None, None
-
-
-def _triage_section(triage_results):
-    if not triage_results:
-        return ""
-    lines = ["\nMalware analysis (Recorded Future Triage):"]
-    for t in triage_results:
-        if t.get("report_url"):
-            lines.append(f"  • {t['exe_url']}\n    Report: {t['report_url']}")
-        else:
-            lines.append(f"  • {t['exe_url']} (analysis pending)")
-    return "\n".join(lines)
 
 
 def send_hosting_abuse_email(to_addr, domain, ip, url, reporter_context, case_id="", triage_results=None):
